@@ -1,0 +1,7 @@
+alumni_id,full_name,email,skills,interests,location,engagement_score,availability
+A001,Alice Smith,alice@example.com,"Python, SQL, Data Analysis",mentorship,NY,75,mentor
+A002,Bob Johnson,bob@example.com,"Excel, PowerBI","finance, analytics",CA,80,mentor
+A003,Carol White,carol@example.com,"Java, Spring",teaching,TX,N/A,available
+A004,David Lee,david@example.com,"Python, Machine Learning","AI, research",NY,90,mentor
+A005,Eve Martinez,eve@example.com,"React, JavaScript","web development, mentorship",FL,65,available
+A006,Frank Chen,frank@example.com,"SQL, Tableau","data visualization, teaching",CA,N/A,mentor

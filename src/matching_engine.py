@@ -1,3 +1,4 @@
+import csv
 def rank_alumni(request: dict, alumni_profiles: list[dict]) -> list[dict]:
     """
     Rank alumni profiles for a given request using a deterministic scoring model.
@@ -83,3 +84,51 @@ def rank_alumni(request: dict, alumni_profiles: list[dict]) -> list[dict]:
 
     results.sort(key=lambda x: x["total_score"], reverse=True)
     return results
+def load_alumni_profiles_csv(path: str) -> list[dict]:
+    """
+    Load alumni profiles from a CSV file and return a list of dicts matching the
+    alumni schema used by rank_alumni().
+
+    Parsing assumptions (v1):
+    - skills and interests are comma-separated strings (e.g., "python, sql")
+      and are converted to list[str] (lowercased, stripped).
+    - engagement_score is parsed as float. If the value appears to be 0–100,
+      it is normalized to 0–1 by dividing by 100.
+    - Missing or invalid engagement_score values default to 0.0.
+    """
+    profiles: list[dict] = []
+
+    with open(path, newline="", encoding="utf-8") as f:
+        reader = csv.DictReader(f)
+        for row in reader:
+            skills_raw = (row.get("skills") or "")
+            interests_raw = (row.get("interests") or "")
+
+            skills = [s.strip().lower() for s in skills_raw.split(",") if s.strip()]
+            interests = [i.strip().lower() for i in interests_raw.split(",") if i.strip()]
+
+            engagement_raw = (row.get("engagement_score") or "").strip()
+            try:
+                engagement_score = float(engagement_raw) if engagement_raw else 0.0
+            except ValueError:
+                engagement_score = 0.0
+
+            # Normalize if the value looks like 0–100 scale
+            if engagement_score > 1.0:
+                engagement_score = engagement_score / 100.0
+
+            profile = {
+                "alumni_id": (row.get("alumni_id") or "").strip(),
+                "full_name": (row.get("full_name") or "").strip(),
+                "email": (row.get("email") or "").strip(),
+                "skills": skills,
+                "interests": interests,
+                "location": (row.get("location") or "").strip(),
+                "engagement_score": engagement_score,
+                "availability": (row.get("availability") or "").strip(),
+            }
+
+            profiles.append(profile)
+
+    return profiles
+
