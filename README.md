@@ -1,1 +1,2 @@
 ﻿## Colaberry Internship Workspace
+[![CI](https://github.com/naboursiquot2-commits/colaberry-work/actions/workflows/ci.yml/badge.svg)](https://github.com/naboursiquot2-commits/colaberry-work/actions/workflows/ci.yml)
