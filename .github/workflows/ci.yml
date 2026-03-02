@@ -24,3 +24,6 @@ jobs:
 
       - name: Run tests
         run: python -m pytest -v
+ 
+      - name: Run deterministic golden run
+        run: python execution/run_match_local.py
