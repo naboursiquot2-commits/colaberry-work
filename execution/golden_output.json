@@ -1,0 +1,16 @@
+{
+  "request": {
+    "skills": ["python", "sql"],
+    "interests": ["mentorship", "data"],
+    "location": "NY"
+  },
+  "expected_ranking_order": [
+    "A001",
+    "A004",
+    "A005",
+    "A002",
+    "A006",
+    "A003"
+  ],
+  "expected_top_score": 0.6750
+}
