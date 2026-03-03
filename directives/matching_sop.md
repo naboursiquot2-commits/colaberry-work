@@ -20,7 +20,7 @@ If this SOP conflicts with the code, **the code wins**, and this SOP must be upd
 
 ## 3. Inputs (Contracts)
 
-### 3.1 Candidate Request (API input)
+### 3.1 Candidate Request (engine input)
 The engine expects a request dictionary with:
 
 Required:
