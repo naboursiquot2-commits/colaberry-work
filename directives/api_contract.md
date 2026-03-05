@@ -1,4 +1,4 @@
-# API Contract — Colaberry Nexus Matching Service
+# API Contract — Colaberry Nexus AI Alumni intelligence platform
 **Authoritative Contract for `/health` and `/match`**
 
 Per `CLAUDE.md`: **implementation is authoritative**.  

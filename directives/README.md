@@ -1,6 +1,6 @@
 # Directives (Authoritative Docs)
 
-This folder contains the **authoritative operating documents** for the Colaberry Nexus Matching Service.
+This folder contains the **authoritative operating documents** for the Colaberry Nexus AI Alumni intelligence platform.
 
 Per `CLAUDE.md`:
 - Directives describe **intent + contract**
