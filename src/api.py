@@ -1,10 +1,17 @@
 import logging
 import time
 
-from fastapi import FastAPI
+from fastapi import Depends, FastAPI, Header, HTTPException
 from pydantic import BaseModel
 
 from src.matching_engine import rank_alumni, load_alumni_profiles_csv
+
+_API_KEY = "dev-secret-key"
+
+
+def _require_api_key(x_api_key: str | None = Header(default=None)) -> None:
+    if x_api_key != _API_KEY:
+        raise HTTPException(status_code=401, detail="Invalid or missing API key")
 
 logging.basicConfig(
     level=logging.INFO,
@@ -40,7 +47,7 @@ def health():
     return {"status": "ok"}
 
 
-@app.post("/match", response_model=list[RankedAlumni])
+@app.post("/match", response_model=list[RankedAlumni], dependencies=[Depends(_require_api_key)])
 def match(request: MatchRequest):
     profiles = load_alumni_profiles_csv("data/sample_alumni.csv")
 
