@@ -15,4 +15,22 @@ This service provides:
 - A health check endpoint for readiness validation
 - A deterministic alumni matching endpoint that ranks alumni profiles given a candidate request
 
-Base URL (local):
+Base URL (local):  
+http://localhost:8000
+
+---
+
+## 2. Endpoint: `GET /health`
+
+### Purpose
+Used for health/readiness checks (local development, Docker deployments, and CI smoke tests).
+
+### Request
+No body.
+
+### Response (200)
+
+```json
+{
+  "status": "ok"
+}
