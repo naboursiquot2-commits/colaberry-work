@@ -1,17 +1,19 @@
 import logging
+import os
 import time
 
 from fastapi import Depends, FastAPI, Header, HTTPException
 from pydantic import BaseModel
 
-from src.matching_engine import rank_alumni, load_alumni_profiles_csv
+from src.matching_engine import load_alumni_profiles_csv, rank_alumni
 
-_API_KEY = "dev-secret-key"
+_API_KEY = os.getenv("API_KEY", "dev-secret-key")
 
 
 def _require_api_key(x_api_key: str | None = Header(default=None)) -> None:
     if x_api_key != _API_KEY:
         raise HTTPException(status_code=401, detail="Invalid or missing API key")
+
 
 logging.basicConfig(
     level=logging.INFO,
@@ -39,7 +41,10 @@ class RankedAlumni(BaseModel):
     confidence_score: float
 
 
-app = FastAPI(title="Colaberry Nexus Matching Service", version="0.1.0")
+app = FastAPI(
+    title="Colaberry Nexus AI Alumni Intelligence Platform",
+    version="0.1.0",
+)
 
 
 @app.get("/health")
@@ -47,7 +52,11 @@ def health():
     return {"status": "ok"}
 
 
-@app.post("/match", response_model=list[RankedAlumni], dependencies=[Depends(_require_api_key)])
+@app.post(
+    "/match",
+    response_model=list[RankedAlumni],
+    dependencies=[Depends(_require_api_key)],
+)
 def match(request: MatchRequest):
     profiles = load_alumni_profiles_csv("data/sample_alumni.csv")
 
@@ -61,5 +70,4 @@ def match(request: MatchRequest):
         len(results),
         elapsed_ms,
     )
-
     return results
