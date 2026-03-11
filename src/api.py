@@ -63,6 +63,10 @@ def match(request: MatchRequest):
 
     start = time.perf_counter()
     results = rank_alumni(request.model_dump(), profiles)
+
+    if request.limit:
+        results = results[: request.limit]
+
     elapsed_ms = (time.perf_counter() - start) * 1000
 
     logger.info(
