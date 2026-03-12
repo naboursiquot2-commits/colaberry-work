@@ -16,7 +16,7 @@ This service provides:
 - A deterministic alumni matching endpoint that ranks alumni profiles given a candidate request
 
 Base URL (local):  
-http://localhost:8000
+`http://localhost:8000`
 
 ---
 
