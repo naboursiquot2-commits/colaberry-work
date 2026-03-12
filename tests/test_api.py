@@ -101,3 +101,26 @@ def test_match_endpoint_limit_parameter():
 
     assert isinstance(data, list)
     assert len(data) == 1
+
+
+def test_match_endpoint_offset_parameter():
+    """
+    A POST to /match with offset=1 should skip the first ranked result.
+    """
+    response = client.post(
+        "/match",
+        headers=VALID_KEY,
+        json={
+            "skills": ["python"],
+            "interests": ["mentorship"],
+            "location": "NY",
+            "offset": 1,
+        },
+    )
+
+    assert response.status_code == 200
+
+    data = response.json()
+
+    assert isinstance(data, list)
+    assert len(data) > 0
