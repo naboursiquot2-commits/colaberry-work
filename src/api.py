@@ -65,6 +65,9 @@ def match(request: MatchRequest):
     start = time.perf_counter()
     results = rank_alumni(request.model_dump(), profiles)
 
+    if request.offset:
+        results = results[request.offset:]
+
     if request.limit:
         results = results[: request.limit]
 
