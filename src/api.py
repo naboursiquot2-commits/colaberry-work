@@ -27,6 +27,7 @@ class MatchRequest(BaseModel):
     interests: list[str] = []
     location: str | None = None
     limit: int | None = None
+    offset: int = 0
 
 
 class RankedAlumni(BaseModel):
