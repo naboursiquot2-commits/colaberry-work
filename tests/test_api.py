@@ -124,3 +124,28 @@ def test_match_endpoint_offset_parameter():
 
     assert isinstance(data, list)
     assert len(data) > 0
+
+
+def test_match_endpoint_limit_and_offset_combined():
+    """
+    A POST to /match with both limit and offset should return
+    a correctly sliced subset of results.
+    """
+    response = client.post(
+        "/match",
+        headers=VALID_KEY,
+        json={
+            "skills": ["python"],
+            "interests": ["mentorship"],
+            "location": "NY",
+            "limit": 2,
+            "offset": 1,
+        },
+    )
+
+    assert response.status_code == 200
+
+    data = response.json()
+
+    assert isinstance(data, list)
+    assert len(data) <= 2
