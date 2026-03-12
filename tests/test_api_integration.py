@@ -33,7 +33,15 @@ def test_match_with_valid_api_key_returns_ranked_results():
 
     data = response.json()
 
-    assert isinstance(data, list)
-    assert len(data) > 0
-    assert "alumni_id" in data[0]
-    assert "total_score" in data[0]
+    assert isinstance(data, dict)
+    assert "count" in data
+    assert "limit" in data
+    assert "offset" in data
+    assert "results" in data
+
+    results = data["results"]
+
+    assert isinstance(results, list)
+    assert len(results) > 0
+    assert "alumni_id" in results[0]
+    assert "total_score" in results[0]

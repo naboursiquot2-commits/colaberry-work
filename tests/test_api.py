@@ -10,7 +10,7 @@ VALID_KEY = {"x-api-key": "dev-secret-key"}
 def test_match_endpoint_valid_request_returns_200():
     """
     A valid POST to /match with a correct API key and correctly-typed fields
-    should return HTTP 200 and a list of ranked results.
+    should return HTTP 200 and a paginated response containing ranked results.
     """
     response = client.post(
         "/match",
@@ -18,7 +18,15 @@ def test_match_endpoint_valid_request_returns_200():
         json={"skills": ["python"], "interests": ["mentorship"], "location": "NY"},
     )
     assert response.status_code == 200
-    assert isinstance(response.json(), list)
+
+    data = response.json()
+
+    assert isinstance(data, dict)
+    assert "count" in data
+    assert "limit" in data
+    assert "offset" in data
+    assert "results" in data
+    assert isinstance(data["results"], list)
 
 
 def test_match_endpoint_invalid_request_returns_422():
@@ -98,9 +106,14 @@ def test_match_endpoint_limit_parameter():
     assert response.status_code == 200
 
     data = response.json()
+    results = data["results"]
 
-    assert isinstance(data, list)
-    assert len(data) == 1
+    assert isinstance(data, dict)
+    assert data["limit"] == 1
+    assert data["offset"] == 0
+    assert isinstance(results, list)
+    assert len(results) == 1
+    assert data["count"] == 1
 
 
 def test_match_endpoint_offset_parameter():
@@ -121,9 +134,13 @@ def test_match_endpoint_offset_parameter():
     assert response.status_code == 200
 
     data = response.json()
+    results = data["results"]
 
-    assert isinstance(data, list)
-    assert len(data) > 0
+    assert isinstance(data, dict)
+    assert data["offset"] == 1
+    assert isinstance(results, list)
+    assert len(results) > 0
+    assert data["count"] == len(results)
 
 
 def test_match_endpoint_limit_and_offset_combined():
@@ -146,6 +163,11 @@ def test_match_endpoint_limit_and_offset_combined():
     assert response.status_code == 200
 
     data = response.json()
+    results = data["results"]
 
-    assert isinstance(data, list)
-    assert len(data) <= 2
+    assert isinstance(data, dict)
+    assert data["limit"] == 2
+    assert data["offset"] == 1
+    assert isinstance(results, list)
+    assert len(results) <= 2
+    assert data["count"] == len(results)

@@ -43,6 +43,13 @@ class RankedAlumni(BaseModel):
     confidence_score: float
 
 
+class MatchResponse(BaseModel):
+    count: int
+    limit: int | None = None
+    offset: int = 0
+    results: list[RankedAlumni]
+
+
 app = FastAPI(
     title="Colaberry Nexus AI Alumni Intelligence Platform",
     version="0.1.0",
@@ -56,7 +63,7 @@ def health():
 
 @app.post(
     "/match",
-    response_model=list[RankedAlumni],
+    response_model=MatchResponse,
     dependencies=[Depends(_require_api_key)],
 )
 def match(request: MatchRequest):
@@ -79,4 +86,10 @@ def match(request: MatchRequest):
         len(results),
         elapsed_ms,
     )
-    return results
+
+    return {
+        "count": len(results),
+        "limit": request.limit,
+        "offset": request.offset,
+        "results": results,
+    }
