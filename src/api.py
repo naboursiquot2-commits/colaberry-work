@@ -53,10 +53,16 @@ class MatchResponse(BaseModel):
 app = FastAPI(
     title="Colaberry Nexus AI Alumni Intelligence Platform",
     version="0.1.0",
+    description="API for ranking alumni mentors based on skills, interests, location, and engagement signals.",
 )
 
 
-@app.get("/health")
+@app.get(
+    "/health",
+    summary="Service health check",
+    description="Returns the health status of the API service. Used for monitoring and readiness checks.",
+    tags=["System"],
+)
 def health():
     return {"status": "ok"}
 
@@ -64,6 +70,9 @@ def health():
 @app.post(
     "/match",
     response_model=MatchResponse,
+    summary="Rank alumni mentors for a candidate",
+    description="Returns ranked alumni matches based on skills, interests, location, and engagement score. Supports pagination using limit and offset parameters.",
+    tags=["Matching"],
     dependencies=[Depends(_require_api_key)],
 )
 def match(request: MatchRequest):
