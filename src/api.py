@@ -8,6 +8,7 @@ from pydantic import BaseModel, Field
 from src.matching_engine import load_alumni_profiles_csv, rank_alumni
 
 _API_KEY = os.getenv("API_KEY", "dev-secret-key")
+DATA_PATH = os.getenv("DATA_PATH", "data/sample_alumni.csv")
 
 
 def _require_api_key(x_api_key: str | None = Header(default=None)) -> None:
@@ -57,6 +58,19 @@ app = FastAPI(
 )
 
 
+@app.on_event("startup")
+def load_profiles():
+    app.state.profiles = load_alumni_profiles_csv(DATA_PATH)
+
+
+def _get_profiles():
+    profiles = getattr(app.state, "profiles", None)
+    if profiles is None:
+        profiles = load_alumni_profiles_csv(DATA_PATH)
+        app.state.profiles = profiles
+    return profiles
+
+
 @app.get(
     "/health",
     summary="Service health check",
@@ -76,7 +90,7 @@ def health():
     dependencies=[Depends(_require_api_key)],
 )
 def match(request: MatchRequest):
-    profiles = load_alumni_profiles_csv("data/sample_alumni.csv")
+    profiles = _get_profiles()
 
     start = time.perf_counter()
     results = rank_alumni(request.model_dump(), profiles)
