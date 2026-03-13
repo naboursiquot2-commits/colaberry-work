@@ -3,7 +3,7 @@ import os
 import time
 
 from fastapi import Depends, FastAPI, Header, HTTPException
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from src.matching_engine import load_alumni_profiles_csv, rank_alumni
 
@@ -26,8 +26,8 @@ class MatchRequest(BaseModel):
     skills: list[str] = []
     interests: list[str] = []
     location: str | None = None
-    limit: int | None = None
-    offset: int = 0
+    limit: int | None = Field(default=None, ge=1, le=100)
+    offset: int = Field(default=0, ge=0)
 
 
 class RankedAlumni(BaseModel):

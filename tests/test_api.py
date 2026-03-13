@@ -171,3 +171,29 @@ def test_match_endpoint_limit_and_offset_combined():
     assert isinstance(results, list)
     assert len(results) <= 2
     assert data["count"] == len(results)
+
+
+def test_match_endpoint_limit_zero_returns_422():
+    """
+    A POST to /match with limit=0 should return HTTP 422 —
+    rejected by Pydantic validation (ge=1 constraint).
+    """
+    response = client.post(
+        "/match",
+        headers=VALID_KEY,
+        json={"skills": ["python"], "interests": ["mentorship"], "location": "NY", "limit": 0},
+    )
+    assert response.status_code == 422
+
+
+def test_match_endpoint_negative_offset_returns_422():
+    """
+    A POST to /match with offset=-1 should return HTTP 422 —
+    rejected by Pydantic validation (ge=0 constraint).
+    """
+    response = client.post(
+        "/match",
+        headers=VALID_KEY,
+        json={"skills": ["python"], "interests": ["mentorship"], "location": "NY", "offset": -1},
+    )
+    assert response.status_code == 422
