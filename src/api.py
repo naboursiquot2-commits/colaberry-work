@@ -2,7 +2,7 @@ import logging
 import os
 import time
 
-from fastapi import Depends, FastAPI, Header, HTTPException
+from fastapi import Depends, FastAPI, Header, HTTPException, Query
 from pydantic import BaseModel, Field
 
 from src.matching_engine import load_alumni_profiles_csv, rank_alumni
@@ -51,6 +51,24 @@ class MatchResponse(BaseModel):
     results: list[RankedAlumni]
 
 
+class AlumniProfile(BaseModel):
+    alumni_id: str
+    full_name: str
+    email: str
+    skills: list[str]
+    interests: list[str]
+    location: str
+    engagement_score: float
+    availability: str
+
+
+class AlumniListResponse(BaseModel):
+    count: int
+    limit: int | None = None
+    offset: int = 0
+    results: list[AlumniProfile]
+
+
 app = FastAPI(
     title="Colaberry Nexus AI Alumni Intelligence Platform",
     version="0.1.0",
@@ -79,6 +97,32 @@ def _get_profiles():
 )
 def health():
     return {"status": "ok"}
+
+
+@app.get(
+    "/alumni",
+    response_model=AlumniListResponse,
+    summary="List alumni profiles",
+    description="Returns paginated alumni profiles from the dataset without ranking.",
+    tags=["Alumni"],
+    dependencies=[Depends(_require_api_key)],
+)
+def list_alumni(
+    limit: int | None = Query(default=None, ge=1, le=100),
+    offset: int = Query(default=0, ge=0),
+):
+    profiles = _get_profiles()
+
+    results = profiles[offset:]
+    if limit is not None:
+        results = results[:limit]
+
+    return {
+        "count": len(results),
+        "limit": limit,
+        "offset": offset,
+        "results": results,
+    }
 
 
 @app.post(
