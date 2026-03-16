@@ -1,6 +1,7 @@
 import logging
 import os
 import time
+from contextlib import asynccontextmanager
 
 from fastapi import Depends, FastAPI, Header, HTTPException, Query
 from pydantic import BaseModel, Field
@@ -69,16 +70,18 @@ class AlumniListResponse(BaseModel):
     results: list[AlumniProfile]
 
 
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    app.state.profiles = load_alumni_profiles_csv(DATA_PATH)
+    yield
+
+
 app = FastAPI(
     title="Colaberry Nexus AI Alumni Intelligence Platform",
     version="0.1.0",
     description="API for ranking alumni mentors based on skills, interests, location, and engagement signals.",
+    lifespan=lifespan,
 )
-
-
-@app.on_event("startup")
-def load_profiles():
-    app.state.profiles = load_alumni_profiles_csv(DATA_PATH)
 
 
 def _get_profiles():
