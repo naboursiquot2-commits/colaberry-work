@@ -13,7 +13,7 @@ def test_match_endpoint_valid_request_returns_200():
     should return HTTP 200 and a paginated response containing ranked results.
     """
     response = client.post(
-        "/match",
+        "/v1/match",
         headers=VALID_KEY,
         json={"skills": ["python"], "interests": ["mentorship"], "location": "NY"},
     )
@@ -36,7 +36,7 @@ def test_match_endpoint_invalid_request_returns_422():
     Auth passes first; Pydantic runs after.
     """
     response = client.post(
-        "/match",
+        "/v1/match",
         headers=VALID_KEY,
         json={"skills": "python", "interests": ["mentorship"], "location": "NY"},
     )
@@ -52,7 +52,7 @@ def test_match_endpoint_logs_ranking_metrics(caplog):
 
     with caplog.at_level(logging.INFO, logger="src.api"):
         response = client.post(
-            "/match",
+            "/v1/match",
             headers=VALID_KEY,
             json={"skills": ["python"], "interests": ["mentorship"], "location": "NY"},
         )
@@ -70,7 +70,7 @@ def test_match_endpoint_missing_api_key_returns_401():
     A POST to /match with no x-api-key header should return HTTP 401.
     """
     response = client.post(
-        "/match",
+        "/v1/match",
         json={"skills": ["python"], "interests": ["mentorship"], "location": "NY"},
     )
     assert response.status_code == 401
@@ -81,7 +81,7 @@ def test_match_endpoint_wrong_api_key_returns_401():
     A POST to /match with an incorrect x-api-key value should return HTTP 401.
     """
     response = client.post(
-        "/match",
+        "/v1/match",
         headers={"x-api-key": "wrong-key"},
         json={"skills": ["python"], "interests": ["mentorship"], "location": "NY"},
     )
@@ -93,7 +93,7 @@ def test_match_endpoint_limit_parameter():
     A POST to /match with limit=1 should return exactly one ranked result.
     """
     response = client.post(
-        "/match",
+        "/v1/match",
         headers=VALID_KEY,
         json={
             "skills": ["python"],
@@ -121,7 +121,7 @@ def test_match_endpoint_offset_parameter():
     A POST to /match with offset=1 should skip the first ranked result.
     """
     response = client.post(
-        "/match",
+        "/v1/match",
         headers=VALID_KEY,
         json={
             "skills": ["python"],
@@ -149,7 +149,7 @@ def test_match_endpoint_limit_and_offset_combined():
     a correctly sliced subset of results.
     """
     response = client.post(
-        "/match",
+        "/v1/match",
         headers=VALID_KEY,
         json={
             "skills": ["python"],
@@ -179,7 +179,7 @@ def test_match_endpoint_limit_zero_returns_422():
     rejected by Pydantic validation (ge=1 constraint).
     """
     response = client.post(
-        "/match",
+        "/v1/match",
         headers=VALID_KEY,
         json={"skills": ["python"], "interests": ["mentorship"], "location": "NY", "limit": 0},
     )
@@ -192,7 +192,7 @@ def test_match_endpoint_negative_offset_returns_422():
     rejected by Pydantic validation (ge=0 constraint).
     """
     response = client.post(
-        "/match",
+        "/v1/match",
         headers=VALID_KEY,
         json={"skills": ["python"], "interests": ["mentorship"], "location": "NY", "offset": -1},
     )

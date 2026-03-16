@@ -7,7 +7,7 @@ VALID_KEY = {"x-api-key": "dev-secret-key"}
 
 
 def test_health_endpoint_returns_ok():
-    response = client.get("/health")
+    response = client.get("/v1/health")
 
     assert response.status_code == 200
     assert response.json() == {"status": "ok"}
@@ -15,7 +15,7 @@ def test_health_endpoint_returns_ok():
 
 def test_match_requires_api_key():
     response = client.post(
-        "/match",
+        "/v1/match",
         json={"skills": ["python"], "interests": ["mentorship"], "location": "NY"},
     )
 
@@ -24,7 +24,7 @@ def test_match_requires_api_key():
 
 def test_match_with_valid_api_key_returns_ranked_results():
     response = client.post(
-        "/match",
+        "/v1/match",
         headers=VALID_KEY,
         json={"skills": ["python"], "interests": ["mentorship"], "location": "NY"},
     )
@@ -48,13 +48,13 @@ def test_match_with_valid_api_key_returns_ranked_results():
 
 
 def test_alumni_endpoint_requires_api_key():
-    response = client.get("/alumni")
+    response = client.get("/v1/alumni")
 
     assert response.status_code == 401
 
 
 def test_alumni_endpoint_with_valid_api_key_returns_paginated_results():
-    response = client.get("/alumni", headers=VALID_KEY)
+    response = client.get("/v1/alumni", headers=VALID_KEY)
 
     assert response.status_code == 200
 

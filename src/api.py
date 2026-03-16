@@ -3,7 +3,7 @@ import os
 import time
 from contextlib import asynccontextmanager
 
-from fastapi import Depends, FastAPI, Header, HTTPException, Query
+from fastapi import APIRouter, Depends, FastAPI, Header, HTTPException, Query
 from pydantic import BaseModel, Field
 
 from src.matching_engine import load_alumni_profiles_csv, rank_alumni
@@ -84,6 +84,9 @@ app = FastAPI(
 )
 
 
+router = APIRouter(prefix="/v1")
+
+
 def _get_profiles():
     profiles = getattr(app.state, "profiles", None)
     if profiles is None:
@@ -92,7 +95,7 @@ def _get_profiles():
     return profiles
 
 
-@app.get(
+@router.get(
     "/health",
     summary="Service health check",
     description="Returns the health status of the API service. Used for monitoring and readiness checks.",
@@ -102,7 +105,7 @@ def health():
     return {"status": "ok"}
 
 
-@app.get(
+@router.get(
     "/alumni",
     response_model=AlumniListResponse,
     summary="List alumni profiles",
@@ -128,7 +131,7 @@ def list_alumni(
     }
 
 
-@app.post(
+@router.post(
     "/match",
     response_model=MatchResponse,
     summary="Rank alumni mentors for a candidate",
@@ -163,3 +166,6 @@ def match(request: MatchRequest):
         "offset": request.offset,
         "results": results,
     }
+
+
+app.include_router(router)
