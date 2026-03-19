@@ -1,3 +1,71 @@
+## Endpoint: GET /v1/alumni/{alumni_id}
+
+### Purpose
+Returns a single alumni profile by ID.
+
+### Authentication
+Requires API key in the request header.
+
+```
+x-api-key: <API_KEY>
+```
+
+---
+
+### Path Parameters
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| alumni_id | string | Yes | The unique identifier of the alumni profile |
+
+---
+
+### Example Request
+
+```
+GET /v1/alumni/A001
+x-api-key: dev-secret-key
+```
+
+---
+
+### Example Response
+
+```json
+{
+  "alumni_id": "A001",
+  "full_name": "Alice Smith",
+  "email": "alice@example.com",
+  "skills": ["python", "sql"],
+  "interests": ["mentorship"],
+  "location": "NY",
+  "engagement_score": 0.75,
+  "availability": "mentor"
+}
+```
+
+---
+
+### Error Responses
+
+#### 401 Unauthorized
+
+```json
+{
+  "detail": "Invalid or missing API key"
+}
+```
+
+#### 404 Not Found
+
+```json
+{
+  "detail": "Alumni not found"
+}
+```
+
+---
+
 ## Endpoint: GET /v1/alumni
 
 ### Purpose

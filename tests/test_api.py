@@ -197,3 +197,22 @@ def test_match_endpoint_negative_offset_returns_422():
         json={"skills": ["python"], "interests": ["mentorship"], "location": "NY", "offset": -1},
     )
     assert response.status_code == 422
+
+
+def test_middleware_logs_access_line_for_every_request(caplog):
+    """
+    Every request must emit one INFO access log line from the middleware
+    containing method, path, and status_code.
+    """
+    import logging
+
+    with caplog.at_level(logging.INFO, logger="src.api"):
+        response = client.get("/v1/health")
+
+    assert response.status_code == 200
+
+    log_messages = [record.message for record in caplog.records]
+    assert any(
+        "method=GET" in msg and "path=/v1/health" in msg and "status_code=200" in msg
+        for msg in log_messages
+    )

@@ -66,3 +66,35 @@ def test_alumni_endpoint_with_valid_api_key_returns_paginated_results():
     assert "offset" in data
     assert "results" in data
     assert isinstance(data["results"], list)
+
+
+def test_response_includes_x_request_id_header():
+    response = client.get("/v1/health")
+
+    assert response.status_code == 200
+    assert "x-request-id" in response.headers
+    assert len(response.headers["x-request-id"]) > 0
+
+
+def test_get_alumni_by_id_returns_profile():
+    response = client.get("/v1/alumni/A001", headers=VALID_KEY)
+
+    assert response.status_code == 200
+    assert response.json()["alumni_id"] == "A001"
+
+
+def test_get_alumni_by_id_not_found_returns_404():
+    response = client.get("/v1/alumni/DOES_NOT_EXIST", headers=VALID_KEY)
+
+    assert response.status_code == 404
+    assert response.json()["detail"] == "Alumni not found"
+
+
+def test_client_supplied_x_request_id_is_echoed_in_response():
+    response = client.get(
+        "/v1/health",
+        headers={"X-Request-ID": "test-request-123"},
+    )
+
+    assert response.status_code == 200
+    assert response.headers["x-request-id"] == "test-request-123"

@@ -153,7 +153,31 @@ curl -X GET "http://localhost:8000/v1/alumni?limit=2&offset=0" \
 
 ---
 
-## 5. Unauthorized Request Example
+## 5. Get Alumni by ID
+
+### Request
+```bash
+curl -X GET "http://localhost:8000/v1/alumni/A001" \
+  -H "x-api-key: dev-secret-key"
+```
+
+### Response
+```json
+{
+  "alumni_id": "A001",
+  "full_name": "Alice Smith",
+  "email": "alice@example.com",
+  "skills": ["python", "sql"],
+  "interests": ["mentorship"],
+  "location": "NY",
+  "engagement_score": 0.75,
+  "availability": "mentor"
+}
+```
+
+---
+
+## 6. Unauthorized Request Example
 
 ### Request
 ```bash

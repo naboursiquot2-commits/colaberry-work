@@ -135,8 +135,11 @@ Service health check
 POST /v1/match  
 Rank alumni mentors
 
-GET /v1/alumni  
+GET /v1/alumni
 List alumni profiles with pagination
+
+GET /v1/alumni/{alumni_id}
+Get a single alumni profile by ID
 
 ---
 
