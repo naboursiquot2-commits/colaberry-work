@@ -199,6 +199,24 @@ def test_match_endpoint_negative_offset_returns_422():
     assert response.status_code == 422
 
 
+def test_match_endpoint_results_include_matched_on():
+    """
+    Each result in /match response must include a matched_on field.
+    """
+    response = client.post(
+        "/v1/match",
+        headers=VALID_KEY,
+        json={"skills": ["python"], "interests": ["mentorship"], "location": "NY"},
+    )
+
+    assert response.status_code == 200
+
+    results = response.json()["results"]
+    assert len(results) > 0
+    for result in results:
+        assert "matched_on" in result
+
+
 def test_middleware_logs_access_line_for_every_request(caplog):
     """
     Every request must emit one INFO access log line from the middleware

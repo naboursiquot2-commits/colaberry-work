@@ -284,3 +284,4 @@ README.md
 - Pagination uses limit and offset
 - Alumni profiles are loaded from CSV and cached at service startup
 - The service is designed as a lightweight microservice architecture
+- Match results include explainability via matched_on — each result reports which signals (skills, interests, location) contributed to the match

@@ -76,10 +76,19 @@ def rank_alumni(request: dict, alumni_profiles: list[dict]) -> list[dict]:
             + 0.20 * engagement
         )
 
+        matched_on = []
+        if skill_score > 0:
+            matched_on.append("skills")
+        if interest_score > 0:
+            matched_on.append("interests")
+        if location_bonus > 0:
+            matched_on.append("location")
+
         results.append({
             **alumni,
             "total_score": total_score,
             "confidence_score": total_score,
+            "matched_on": matched_on,
         })
 
     results.sort(key=lambda x: x["total_score"], reverse=True)

@@ -282,6 +282,67 @@ def test_rank_alumni_missing_engagement_defaults_to_zero():
     assert result["total_score"] == pytest.approx(0.80)
 
 
+def test_rank_alumni_matched_on_includes_all_signals():
+    """
+    When skills, interests, and location all match, matched_on must contain
+    all three signals: "skills", "interests", "location".
+    """
+    request = {
+        "skills": ["python"],
+        "interests": ["mentorship"],
+        "location": "NY",
+    }
+    alumni_profiles = [
+        {
+            "alumni_id": "T001",
+            "full_name": "Test Alumni",
+            "email": "test@example.com",
+            "skills": ["python"],
+            "interests": ["mentorship"],
+            "location": "NY",
+            "engagement_score": 0.5,
+            "availability": "mentor",
+        }
+    ]
+
+    results = rank_alumni(request, alumni_profiles)
+
+    assert len(results) == 1
+    matched_on = results[0]["matched_on"]
+    assert "skills" in matched_on
+    assert "interests" in matched_on
+    assert "location" in matched_on
+
+
+def test_rank_alumni_matched_on_does_not_include_engagement():
+    """
+    matched_on must never include "engagement" — engagement contributes to
+    total_score but is not a match signal.
+    """
+    request = {
+        "skills": ["python"],
+        "interests": ["mentorship"],
+        "location": "NY",
+    }
+    alumni_profiles = [
+        {
+            "alumni_id": "T002",
+            "full_name": "Test Alumni",
+            "email": "test@example.com",
+            "skills": ["python"],
+            "interests": ["mentorship"],
+            "location": "NY",
+            "engagement_score": 1.0,
+            "availability": "mentor",
+        }
+    ]
+
+    results = rank_alumni(request, alumni_profiles)
+
+    assert len(results) == 1
+    assert "engagement" not in results[0]["matched_on"]
+
+
 def test_rank_alumni_performance_1000_profiles():
     """
     Performance test: rank_alumni must process 1,000 synthetic profiles in under 2.0s.

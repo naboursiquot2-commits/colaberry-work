@@ -49,7 +49,8 @@ curl -X POST "http://localhost:8000/v1/match" \
       "engagement_score": 0.75,
       "availability": "mentor",
       "total_score": 0.65,
-      "confidence_score": 0.65
+      "confidence_score": 0.65,
+      "matched_on": ["skills", "interests", "location"]
     }
   ]
 }
@@ -90,7 +91,8 @@ curl -X POST "http://localhost:8000/v1/match" \
       "engagement_score": 0.9,
       "availability": "mentor",
       "total_score": 0.505,
-      "confidence_score": 0.505
+      "confidence_score": 0.505,
+      "matched_on": ["skills", "location"]
     },
     {
       "alumni_id": "A005",
@@ -102,7 +104,8 @@ curl -X POST "http://localhost:8000/v1/match" \
       "engagement_score": 0.65,
       "availability": "available",
       "total_score": 0.255,
-      "confidence_score": 0.255
+      "confidence_score": 0.255,
+      "matched_on": ["interests"]
     }
   ]
 }

@@ -60,6 +60,7 @@ class RankedAlumni(BaseModel):
     availability: str
     total_score: float
     confidence_score: float
+    matched_on: list[str]
 
 
 class MatchResponse(BaseModel):

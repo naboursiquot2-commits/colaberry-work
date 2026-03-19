@@ -1,3 +1,101 @@
+## Endpoint: POST /v1/match
+
+### Purpose
+Returns ranked alumni profiles matching the candidate's skills, interests, and location.
+
+### Authentication
+Requires API key in the request header.
+
+```
+x-api-key: <API_KEY>
+```
+
+---
+
+### Request Body Fields
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| skills | list[str] | No | Candidate skills to match against |
+| interests | list[str] | No | Candidate interests to match against |
+| location | string | No | Candidate location for location bonus |
+| limit | integer | No | Maximum results returned (1–100) |
+| offset | integer | No | Number of results to skip |
+
+---
+
+### Response Fields (per result)
+
+| Field | Type | Description |
+|-------|------|-------------|
+| alumni_id | string | Unique alumni identifier |
+| full_name | string | Alumni full name |
+| email | string | Alumni email address |
+| skills | list[str] | Alumni skills |
+| interests | list[str] | Alumni interests |
+| location | string | Alumni location |
+| engagement_score | float | Normalized engagement score (0–1) |
+| availability | string | Alumni availability status |
+| total_score | float | Weighted ranking score (0–1) |
+| confidence_score | float | Confidence score (equals total_score in v1) |
+| matched_on | list[str] | Signals that contributed to the match: any of "skills", "interests", "location" |
+
+---
+
+### Example Request
+
+```
+POST /v1/match
+x-api-key: dev-secret-key
+
+{
+  "skills": ["python"],
+  "interests": ["mentorship"],
+  "location": "NY"
+}
+```
+
+---
+
+### Example Response
+
+```json
+{
+  "count": 1,
+  "limit": null,
+  "offset": 0,
+  "results": [
+    {
+      "alumni_id": "A001",
+      "full_name": "Alice Smith",
+      "email": "alice@example.com",
+      "skills": ["python", "sql"],
+      "interests": ["mentorship"],
+      "location": "NY",
+      "engagement_score": 0.75,
+      "availability": "mentor",
+      "total_score": 0.65,
+      "confidence_score": 0.65,
+      "matched_on": ["skills", "interests", "location"]
+    }
+  ]
+}
+```
+
+---
+
+### Error Responses
+
+#### 401 Unauthorized
+
+```json
+{
+  "detail": "Invalid or missing API key"
+}
+```
+
+---
+
 ## Endpoint: GET /v1/alumni/{alumni_id}
 
 ### Purpose
