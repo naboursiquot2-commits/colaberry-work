@@ -7,6 +7,8 @@ from contextlib import asynccontextmanager
 from contextvars import ContextVar
 
 from fastapi import APIRouter, Depends, FastAPI, Header, HTTPException, Query, Request
+from fastapi.exceptions import RequestValidationError
+from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
 
 from pythonjsonlogger import json as jsonlogger
@@ -110,6 +112,24 @@ app = FastAPI(
 router = APIRouter(prefix="/v1")
 
 
+@app.exception_handler(HTTPException)
+async def _http_exception_handler(request: Request, exc: HTTPException) -> JSONResponse:
+    request_id = getattr(request.state, "request_id", "-")
+    return JSONResponse(
+        status_code=exc.status_code,
+        content={"error": {"code": exc.status_code, "message": exc.detail, "request_id": request_id}},
+    )
+
+
+@app.exception_handler(RequestValidationError)
+async def _validation_exception_handler(request: Request, exc: RequestValidationError) -> JSONResponse:
+    request_id = getattr(request.state, "request_id", "-")
+    return JSONResponse(
+        status_code=422,
+        content={"error": {"code": 422, "message": "Validation error", "request_id": request_id}},
+    )
+
+
 @app.middleware("http")
 async def _request_id_middleware(request: Request, call_next):
     request_id = request.headers.get("X-Request-ID") or str(uuid.uuid4())
@@ -140,8 +160,10 @@ async def _rate_limit_middleware(request: Request, call_next):
     timestamps = _rate_limit_counts[api_key]
     _rate_limit_counts[api_key] = [t for t in timestamps if t > window_start]
     if len(_rate_limit_counts[api_key]) >= _RATE_LIMIT_MAX:
-        from fastapi.responses import JSONResponse
-        return JSONResponse(status_code=429, content={"detail": "Rate limit exceeded"})
+        return JSONResponse(
+            status_code=429,
+            content={"error": {"code": 429, "message": "Rate limit exceeded", "request_id": "-"}},
+        )
     _rate_limit_counts[api_key].append(now)
     return await call_next(request)
 

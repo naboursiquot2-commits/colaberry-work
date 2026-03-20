@@ -87,7 +87,21 @@ def test_get_alumni_by_id_not_found_returns_404():
     response = client.get("/v1/alumni/DOES_NOT_EXIST", headers=VALID_KEY)
 
     assert response.status_code == 404
-    assert response.json()["detail"] == "Alumni not found"
+    assert response.json()["error"]["message"] == "Alumni not found"
+
+
+def test_structured_error_response_on_401():
+    response = client.post(
+        "/v1/match",
+        json={"skills": ["python"], "interests": ["mentorship"], "location": "NY"},
+    )
+
+    assert response.status_code == 401
+
+    error = response.json()["error"]
+    assert error["code"] == 401
+    assert error["message"] == "Invalid or missing API key"
+    assert error["request_id"] and len(error["request_id"]) > 0
 
 
 def test_client_supplied_x_request_id_is_echoed_in_response():

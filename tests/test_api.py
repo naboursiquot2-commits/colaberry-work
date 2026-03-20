@@ -236,7 +236,10 @@ def test_rate_limit_middleware_returns_429_after_max_requests(monkeypatch):
     assert r1.status_code == 200
     assert r2.status_code == 200
     assert r3.status_code == 429
-    assert r3.json()["detail"] == "Rate limit exceeded"
+    error = r3.json()["error"]
+    assert error["code"] == 429
+    assert error["message"] == "Rate limit exceeded"
+    assert error["request_id"] == "-"
 
 
 def test_middleware_logs_access_line_for_every_request(caplog):
