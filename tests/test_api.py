@@ -297,3 +297,37 @@ def test_middleware_logs_access_line_for_every_request(caplog):
         "method=GET" in msg and "path=/v1/health" in msg and "status_code=200" in msg
         for msg in log_messages
     )
+
+
+def test_match_endpoint_whitespace_only_skill_returns_422():
+    """
+    A POST to /match with a whitespace-only skill item must return 422
+    using the structured error envelope.
+    """
+    response = client.post(
+        "/v1/match",
+        headers=VALID_KEY,
+        json={"skills": ["   "], "interests": [], "location": "NY"},
+    )
+
+    assert response.status_code == 422
+    error = response.json()["error"]
+    assert error["code"] == 422
+    assert error["message"] == "Validation error"
+
+
+def test_match_endpoint_skills_exceeding_max_length_returns_422():
+    """
+    A POST to /match with more than 50 skills must return 422
+    using the structured error envelope.
+    """
+    response = client.post(
+        "/v1/match",
+        headers=VALID_KEY,
+        json={"skills": [f"skill{i}" for i in range(51)], "interests": [], "location": "NY"},
+    )
+
+    assert response.status_code == 422
+    error = response.json()["error"]
+    assert error["code"] == 422
+    assert error["message"] == "Validation error"

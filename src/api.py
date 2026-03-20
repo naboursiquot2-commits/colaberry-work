@@ -9,7 +9,7 @@ from contextvars import ContextVar
 from fastapi import APIRouter, Depends, FastAPI, Header, HTTPException, Query, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 from pythonjsonlogger import json as jsonlogger
 
@@ -49,11 +49,27 @@ logger = logging.getLogger(__name__)
 
 
 class MatchRequest(BaseModel):
-    skills: list[str] = []
-    interests: list[str] = []
+    skills: list[str] = Field(default=[], max_length=50)
+    interests: list[str] = Field(default=[], max_length=50)
     location: str | None = None
     limit: int | None = Field(default=None, ge=1, le=100)
     offset: int = Field(default=0, ge=0)
+
+    @field_validator("skills", "interests", mode="before")
+    @classmethod
+    def _strip_and_reject_empty(cls, v):
+        if not isinstance(v, list):
+            return v
+        result = []
+        for item in v:
+            if not isinstance(item, str):
+                result.append(item)
+                continue
+            stripped = item.strip()
+            if not stripped:
+                raise ValueError("items must not be empty or whitespace-only")
+            result.append(stripped)
+        return result
 
 
 class RankedAlumni(BaseModel):
