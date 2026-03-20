@@ -242,6 +242,44 @@ def test_rate_limit_middleware_returns_429_after_max_requests(monkeypatch):
     assert error["request_id"] == "-"
 
 
+def test_health_endpoint_returns_profiles_loaded_count():
+    """
+    GET /v1/health must return 200 with status "ok" and a profiles_loaded
+    count of zero or more when profiles are available.
+    """
+    with TestClient(app) as local_client:
+        response = local_client.get("/v1/health")
+
+    assert response.status_code == 200
+
+    data = response.json()
+    assert data["status"] == "ok"
+    assert "profiles_loaded" in data
+    assert data["profiles_loaded"] >= 0
+
+
+def test_health_endpoint_returns_503_when_profiles_not_loaded():
+    """
+    GET /v1/health must return 503 with status "error" when app.state.profiles
+    is None (profiles failed to load at startup).
+    """
+    import src.api as api_module
+
+    with TestClient(app) as local_client:
+        original = api_module.app.state.profiles
+        api_module.app.state.profiles = None
+        try:
+            response = local_client.get("/v1/health")
+        finally:
+            api_module.app.state.profiles = original
+
+    assert response.status_code == 503
+
+    data = response.json()
+    assert data["status"] == "error"
+    assert data["detail"] == "profiles not loaded"
+
+
 def test_middleware_logs_access_line_for_every_request(caplog):
     """
     Every request must emit one INFO access log line from the middleware

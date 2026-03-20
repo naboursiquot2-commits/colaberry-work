@@ -183,7 +183,13 @@ def _get_profiles():
     tags=["System"],
 )
 def health():
-    return {"status": "ok"}
+    profiles = getattr(app.state, "profiles", None)
+    if profiles is None:
+        return JSONResponse(
+            status_code=503,
+            content={"status": "error", "detail": "profiles not loaded"},
+        )
+    return {"status": "ok", "profiles_loaded": len(profiles)}
 
 
 @router.get(
