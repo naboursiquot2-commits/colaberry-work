@@ -2,6 +2,7 @@ import logging
 import os
 import time
 import uuid
+from collections import defaultdict
 from contextlib import asynccontextmanager
 from contextvars import ContextVar
 
@@ -14,6 +15,10 @@ from src.matching_engine import load_alumni_profiles_csv, rank_alumni
 
 _API_KEY = os.getenv("API_KEY", "dev-secret-key")
 DATA_PATH = os.getenv("DATA_PATH", "data/sample_alumni.csv")
+
+_rate_limit_counts: dict[str, list[float]] = defaultdict(list)
+_RATE_LIMIT_MAX = int(os.getenv("RATE_LIMIT_MAX", "60"))
+_RATE_LIMIT_WINDOW = int(os.getenv("RATE_LIMIT_WINDOW", "60"))
 
 
 def _require_api_key(x_api_key: str | None = Header(default=None)) -> None:
@@ -125,6 +130,20 @@ async def _request_id_middleware(request: Request, call_next):
     )
     response.headers["X-Request-ID"] = request_id
     return response
+
+
+@app.middleware("http")
+async def _rate_limit_middleware(request: Request, call_next):
+    api_key = request.headers.get("x-api-key") or "anonymous"
+    now = time.time()
+    window_start = now - _RATE_LIMIT_WINDOW
+    timestamps = _rate_limit_counts[api_key]
+    _rate_limit_counts[api_key] = [t for t in timestamps if t > window_start]
+    if len(_rate_limit_counts[api_key]) >= _RATE_LIMIT_MAX:
+        from fastapi.responses import JSONResponse
+        return JSONResponse(status_code=429, content={"detail": "Rate limit exceeded"})
+    _rate_limit_counts[api_key].append(now)
+    return await call_next(request)
 
 
 def _get_profiles():

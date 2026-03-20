@@ -217,6 +217,28 @@ def test_match_endpoint_results_include_matched_on():
         assert "matched_on" in result
 
 
+def test_rate_limit_middleware_returns_429_after_max_requests(monkeypatch):
+    """
+    With RATE_LIMIT_MAX=2, the third request from the same API key within
+    the rate limit window must be rejected with HTTP 429 and the detail
+    "Rate limit exceeded".
+    """
+    import src.api as api_module
+
+    monkeypatch.setattr(api_module, "_RATE_LIMIT_MAX", 2)
+    monkeypatch.setattr(api_module, "_RATE_LIMIT_WINDOW", 60)
+    api_module._rate_limit_counts.clear()
+
+    r1 = client.get("/v1/health")
+    r2 = client.get("/v1/health")
+    r3 = client.get("/v1/health")
+
+    assert r1.status_code == 200
+    assert r2.status_code == 200
+    assert r3.status_code == 429
+    assert r3.json()["detail"] == "Rate limit exceeded"
+
+
 def test_middleware_logs_access_line_for_every_request(caplog):
     """
     Every request must emit one INFO access log line from the middleware
