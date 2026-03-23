@@ -1,69 +1,82 @@
-﻿Colaberry Nexus AI Alumni Intelligence Platform
+﻿# Colaberry Nexus AI Alumni Intelligence Platform
 
 Backend matching service that ranks alumni mentors against learner requests using a deterministic scoring engine, with production-ready API architecture, observability, testing, and CI/CD.
 
-Overview
+---
+
+## Overview
 
 Nexus AI is a backend matching service that ranks Colaberry alumni mentors against learner requests using a deterministic scoring engine. Candidates are scored across skills, interests, location, and engagement signals — producing consistent, auditable results with no LLM involvement in the ranking logic.
 
 The service includes production-ready backend features:
 
-Authentication — API key enforcement via x-api-key header
-Pagination — limit / offset support on match and listing endpoints
-Structured logging — JSON-formatted logs
-Request ID tracing — every request includes an X-Request-ID
-Rate limiting — per-API-key request throttling
-Structured error responses — consistent error schema
-Health readiness endpoint — /v1/health reports service readiness
-Explainable match results — results include matched_on
-Automated testing with pytest
-Continuous Integration with GitHub Actions
-Test coverage enforcement in CI
-Docker container support
-Architecture Overview
+- API key authentication
+- Pagination (limit / offset)
+- Structured JSON logging
+- Request ID tracing (X-Request-ID)
+- Rate limiting per API key
+- Structured error responses
+- Health readiness endpoint (`/v1/health`)
+- Explainable match results (`matched_on`)
+- Automated testing with pytest
+- Continuous Integration with GitHub Actions
+- Test coverage enforcement
+- Docker container support
+
+---
+
+## Architecture Overview
 
 The system is structured as a layered pipeline:
 
-Client → API Gateway → Middleware → Matching Engine → Data Layer → Response
+**Client → API Gateway → Middleware → Matching Engine → Data Layer → Response**
 
-API Gateway
-FastAPI handles routing, validation, and versioned endpoints (/v1)
-API key authentication enforced on protected endpoints
-OpenAPI / Swagger documentation automatically generated
-Middleware
-Request ID tracing
-Structured JSON logging
-Rate limiting per API key
-Structured error handling
-Matching Engine
+### API Gateway (FastAPI)
+- Routing and validation
+- Versioned endpoints (`/v1`)
+- API key authentication
+- OpenAPI / Swagger documentation
+
+### Middleware
+- Request ID tracing
+- Structured JSON logging
+- Rate limiting per API key
+- Structured error handling
+
+### Matching Engine
 Deterministic scoring using:
-Skills overlap
-Interests overlap
-Location match
-Engagement score
-Fully auditable and reproducible results
-No LLM involvement in ranking logic
-Data Layer
-Alumni profiles loaded from CSV at service startup
-Cached in memory for low-latency ranking queries
-Response Layer
-Returns ranked results with:
-confidence_score
-matched_on (explainability signals)
-Explainability
+- Skills overlap
+- Interests overlap
+- Location match
+- Engagement score
 
-Every match result includes a matched_on field that identifies which scoring signals contributed to that candidate's ranking.
+Produces fully auditable and reproducible results with no LLM involvement.
+
+### Data Layer
+- Alumni profiles loaded from CSV at service startup
+- Cached in memory for low-latency ranking queries
+
+### Response Layer
+Returns ranked results with:
+- `confidence_score`
+- `matched_on` (explainability signals)
+
+---
+
+## Explainability
+
+Every match result includes a `matched_on` field that identifies which scoring signals contributed to that candidate's ranking.
 
 Supported signals:
-
-skills
-interests
-location
+- skills
+- interests
+- location
 
 This makes the ranking transparent and fully auditable — no black-box scoring.
 
-Example result:
+### Example Result
 
+```json
 {
   "alumni_id": "A042",
   "confidence_score": 0.85,
@@ -83,23 +96,23 @@ Prerequisites
 Python 3.11+
 Git
 Virtual environment support
-Optional: Docker (for containerized deployment)
+Optional: Docker
 Setup
 
-Clone the repository
+Clone the repository:
 
 git clone https://github.com/naboursiquot2-commits/colaberry-work.git
 cd colaberry-work
 
-Create a virtual environment
+Create a virtual environment:
 
 python -m venv .venv
 
-Activate the virtual environment
+Activate the virtual environment:
 
 .venv\Scripts\activate
 
-Install dependencies
+Install dependencies:
 
 pip install -r requirements.txt
 Environment Configuration
@@ -118,7 +131,7 @@ API_KEY secures access to the API
 DATA_PATH defines the dataset location
 Running the API
 
-Start the FastAPI development server
+Start the FastAPI development server:
 
 uvicorn src.api:app --reload
 
@@ -126,32 +139,22 @@ The API will run at:
 
 http://localhost:8000
 
-Interactive API documentation:
+Documentation:
 
 http://localhost:8000/docs
-
-Alternative documentation:
-
 http://localhost:8000/redoc
 API Endpoints
 Method	Endpoint	Description	Auth Required
-GET	/v1/health	Service and data readiness check	No
+GET	/v1/health	Service readiness	No
 POST	/v1/match	Rank alumni mentors	Yes
 GET	/v1/alumni	List alumni profiles	Yes
-GET	/v1/alumni/{alumni_id}	Get alumni profile by ID	Yes
+GET	/v1/alumni/{alumni_id}	Get alumni profile	Yes
 
 All endpoints except /v1/health require the x-api-key header.
 
 Example Requests
 Health Check
 curl -X GET http://localhost:8000/v1/health
-
-Example response:
-
-{
-  "status": "ok",
-  "profiles_loaded": 6
-}
 Match Alumni Mentors
 curl -X POST http://localhost:8000/v1/match \
 -H "Content-Type: application/json" \
@@ -177,39 +180,37 @@ curl -X GET "http://localhost:8000/v1/alumni?limit=2&offset=0" \
 -H "x-api-key: dev-secret-key"
 Common Commands
 
-Run the full test suite
+Run all tests:
 
 python -m pytest
 
-Run tests with verbose output
+Run tests with verbose output:
 
 python -m pytest -v
 
-Run only API tests
+Run only API tests:
 
 python -m pytest tests/test_api.py
 
-Run only matching engine tests
+Run only matching engine tests:
 
 python -m pytest tests/test_matching_engine.py
 Docker
 
-Build the container
+Build the container:
 
 docker build -t alumni-api .
 
-Run the container
+Run the container:
 
 docker run -p 8000:8000 alumni-api
 
-Access the API documentation
+Access documentation:
 
 http://localhost:8000/docs
 Continuous Integration
 
-This repository includes a GitHub Actions CI pipeline.
-
-The pipeline automatically:
+This repository includes a GitHub Actions CI pipeline that:
 
 Installs dependencies
 Runs the pytest test suite
@@ -262,3 +263,22 @@ The ranking engine is deterministic and fully auditable
 License
 
 This project is for educational and portfolio demonstration purposes.
+
+
+---
+
+# Biggest Difference Between Old vs New Style
+Remember this rule for READMEs:
+
+**Good README structure:**
+1. Title
+2. Short description
+3. Overview
+4. Architecture
+5. Example
+6. Runbook / Setup
+7. API
+8. Testing
+9. CI/CD
+10. Project Structure
+11. Future Work
