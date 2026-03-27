@@ -20,13 +20,19 @@ jobs:
           python-version: "3.12"
 
       - name: Install dependencies
-        run: pip install -r requirements.txt
+        run: pip install -r requirements-lock.txt
 
       - name: Validate dataset
         run: python execution/validate_sample_dataset.py
 
       - name: Run tests
         run: python -m pytest -v
- 
+
       - name: Run deterministic golden run
         run: python execution/run_match_local.py
+
+      - name: Seed database
+        run: python execution/seed_database.py
+
+      - name: Run DB-mode tests
+        run: python -m pytest tests/test_seed_database.py tests/test_db.py tests/test_api_db_loader.py -v

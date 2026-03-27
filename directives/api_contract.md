@@ -1,3 +1,96 @@
+## Endpoint: GET /v1/version
+
+### Purpose
+Returns the service name, version string, and environment label. Used to confirm which build is running without inspecting container metadata.
+
+### Authentication
+None required. Public endpoint.
+
+---
+
+### Response Fields
+
+| Field | Type | Present | Description |
+|---|---|---|---|
+| service | string | Always | Human-readable service name |
+| version | string | Always | Version string from `SERVICE_VERSION` env var (default: `"0.1.0"`) |
+| environment | string | Only if `ENVIRONMENT` env var is set | Deployment environment label (e.g. `"production"`, `"staging"`) |
+
+---
+
+### Example Request
+
+```
+GET /v1/version
+```
+
+### Example Response (without ENVIRONMENT set)
+
+```json
+{
+  "service": "Colaberry Nexus AI Alumni Intelligence Platform",
+  "version": "0.1.0"
+}
+```
+
+### Example Response (with ENVIRONMENT=production)
+
+```json
+{
+  "service": "Colaberry Nexus AI Alumni Intelligence Platform",
+  "version": "0.1.0",
+  "environment": "production"
+}
+```
+
+---
+
+## Endpoint: GET /v1/metrics
+
+### Purpose
+Returns cumulative in-process request counters since the last process start. Used for quick operational diagnostics.
+
+### Authentication
+None required. Public endpoint, same as `/v1/health`.
+
+---
+
+### Response Fields
+
+| Field | Type | Description |
+|---|---|---|
+| requests_total | integer | Total requests handled by this process since start |
+| requests_by_status | object | Request count keyed by HTTP status code (string keys) |
+| errors_total | integer | Total requests with status code >= 400 |
+| rate_limited_total | integer | Total requests rejected with 429 by this process |
+
+---
+
+### Example Request
+
+```
+GET /v1/metrics
+```
+
+### Example Response
+
+```json
+{
+  "requests_total": 142,
+  "requests_by_status": {"200": 138, "401": 3, "429": 1},
+  "errors_total": 4,
+  "rate_limited_total": 1
+}
+```
+
+---
+
+### Known Limitations
+
+Counters are process-local and in-memory. With multiple uvicorn workers or multiple container instances, each process maintains its own independent counters. Counters reset to zero on process restart. See `docs/runbook.md` for details.
+
+---
+
 ## Endpoint: POST /v1/match
 
 ### Purpose
@@ -46,7 +139,7 @@ x-api-key: <API_KEY>
 
 ```
 POST /v1/match
-x-api-key: dev-secret-key
+x-api-key: <your-api-key>
 
 {
   "skills": ["python"],
@@ -122,7 +215,7 @@ x-api-key: <API_KEY>
 
 ```
 GET /v1/alumni/A001
-x-api-key: dev-secret-key
+x-api-key: <your-api-key>
 ```
 
 ---
@@ -198,7 +291,7 @@ x-api-key: <API_KEY>
 
 ```
 GET /v1/alumni?limit=2&offset=0
-x-api-key: dev-secret-key
+x-api-key: <your-api-key>
 ```
 
 ---

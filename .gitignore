@@ -9,6 +9,9 @@ __pycache__/
 # Jupyter
 .ipynb_checkpoints/
 
+# Generated database files (created by execution/seed_database.py)
+data/*.db
+
 # OS / editor noise
 .DS_Store
 Thumbs.db

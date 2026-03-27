@@ -55,7 +55,9 @@ All items below must be completed before the platform is considered production-r
 # 6. Environment Configuration
 
 * [x] Environment configuration template provided (`.env.example`)
+* [x] Pinned dependency lock file committed (`requirements-lock.txt`)
 * [x] API key configurable via environment variable
+* [x] Application refuses to start if API_KEY is not set (fail-closed, no default)
 * [x] Data path configurable
 * [x] Logging level configurable
 
@@ -67,6 +69,7 @@ All items below must be completed before the platform is considered production-r
 * [x] Architecture overview documented
 * [x] Setup instructions included
 * [x] Test instructions included
+* [x] Operator runbook provided (`docs/runbook.md`)
 
 ---
 
@@ -76,6 +79,9 @@ All items below must be completed before the platform is considered production-r
 * [x] Docker image builds successfully
 * [x] Containerized API runs correctly
 * [x] Swagger UI accessible from container
+* [x] Container runs as non-root user (`appuser`)
+* [x] HEALTHCHECK directive probes `/v1/health` every 30s
+* [x] Uvicorn configured for production (4 workers, explicit log level)
 
 ---
 

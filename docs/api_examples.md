@@ -200,6 +200,55 @@ curl -X POST "http://localhost:8000/v1/match" \
 
 ---
 
+## 7. Version Endpoint
+
+Returns the service name, version, and optionally the environment. No API key required.
+
+### Request
+```bash
+curl -X GET "http://localhost:8000/v1/version"
+```
+
+### Response (default, no ENVIRONMENT set)
+```json
+{
+  "service": "Colaberry Nexus AI Alumni Intelligence Platform",
+  "version": "0.1.0"
+}
+```
+
+### Response (with ENVIRONMENT=production)
+```json
+{
+  "service": "Colaberry Nexus AI Alumni Intelligence Platform",
+  "version": "0.1.0",
+  "environment": "production"
+}
+```
+
+---
+
+## 8. Metrics Endpoint
+
+Returns cumulative in-process counters since the last process start. No API key required.
+
+### Request
+```bash
+curl -X GET "http://localhost:8000/v1/metrics"
+```
+
+### Response
+```json
+{
+  "requests_total": 142,
+  "requests_by_status": {"200": 138, "401": 3, "429": 1},
+  "errors_total": 4,
+  "rate_limited_total": 1
+}
+```
+
+---
+
 ## Interactive API Documentation
 
 Open in your browser:

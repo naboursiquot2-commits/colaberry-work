@@ -208,6 +208,9 @@ docker run -p 8000:8000 alumni-api
 Access documentation:
 
 http://localhost:8000/docs
+
+For troubleshooting startup failures, health check failures, and log inspection, see [docs/runbook.md](docs/runbook.md).
+
 Continuous Integration
 
 This repository includes a GitHub Actions CI pipeline that:
@@ -263,6 +266,8 @@ The ranking engine is deterministic and fully auditable
 License
 
 This project is for educational and portfolio demonstration purposes.
+
+See [CHANGELOG.md](CHANGELOG.md) for a summary of completed milestones and known limitations.
 
 
 ---

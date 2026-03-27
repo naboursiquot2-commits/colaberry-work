@@ -14,11 +14,30 @@ from pydantic import BaseModel, Field, field_validator
 from pythonjsonlogger import json as jsonlogger
 
 from src.matching_engine import load_alumni_profiles_csv, rank_alumni
+from src.repository import CsvAlumniRepository, SqliteAlumniRepository
 
-_API_KEY = os.getenv("API_KEY", "dev-secret-key")
+_API_KEY = os.getenv("API_KEY")
+if not _API_KEY:
+    raise ValueError("API_KEY environment variable is required and must not be empty")
 DATA_PATH = os.getenv("DATA_PATH", "data/sample_alumni.csv")
+DATABASE_PATH = os.getenv("DATABASE_PATH")  # optional; if set and file exists, DB loader is used
+_SERVICE_VERSION = os.getenv("SERVICE_VERSION", "0.1.0")
+_SERVICE_NAME = "Colaberry Nexus AI Alumni Intelligence Platform"
+_ENVIRONMENT = os.getenv("ENVIRONMENT")
 
+# Rate limiting is process-local. This dict is not shared across uvicorn workers or
+# container instances. With --workers 4, each worker maintains its own counter, so the
+# effective rate limit is RATE_LIMIT_MAX * workers. Across multiple containers it
+# multiplies further. Container restarts reset all counters. This is acceptable for
+# demo and single-instance deployments but is not a strong abuse-prevention control.
 _rate_limit_counts: dict[str, list[float]] = defaultdict(list)
+
+# In-process request counters. Same scope as _rate_limit_counts: process-local,
+# reset on restart, multiplied across workers. Exposed via GET /v1/metrics.
+_requests_total: int = 0
+_requests_by_status: dict[int, int] = defaultdict(int)
+_errors_total: int = 0
+_rate_limited_total: int = 0
 _RATE_LIMIT_MAX = int(os.getenv("RATE_LIMIT_MAX", "60"))
 _RATE_LIMIT_WINDOW = int(os.getenv("RATE_LIMIT_WINDOW", "60"))
 
@@ -113,7 +132,15 @@ class AlumniListResponse(BaseModel):
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    app.state.profiles = load_alumni_profiles_csv(DATA_PATH)
+    import os as _os
+    if DATABASE_PATH and _os.path.exists(DATABASE_PATH):
+        repo = SqliteAlumniRepository(DATABASE_PATH)
+    else:
+        repo = CsvAlumniRepository(DATA_PATH)
+    app.state.repo = repo
+    # app.state.profiles is retained for backward compatibility: existing tests
+    # and the health endpoint read this attribute directly.
+    app.state.profiles = repo.get_all_alumni()
     yield
 
 
@@ -148,6 +175,7 @@ async def _validation_exception_handler(request: Request, exc: RequestValidation
 
 @app.middleware("http")
 async def _request_id_middleware(request: Request, call_next):
+    global _requests_total, _errors_total
     request_id = request.headers.get("X-Request-ID") or str(uuid.uuid4())
     request.state.request_id = request_id
     token = _request_id_ctx.set(request_id)
@@ -157,6 +185,10 @@ async def _request_id_middleware(request: Request, call_next):
     finally:
         _request_id_ctx.reset(token)
     elapsed_ms = (time.perf_counter() - start) * 1000
+    _requests_total += 1
+    _requests_by_status[response.status_code] += 1
+    if response.status_code >= 400:
+        _errors_total += 1
     logger.info(
         "method=%s path=%s status_code=%d elapsed_ms=%.2f",
         request.method,
@@ -176,6 +208,8 @@ async def _rate_limit_middleware(request: Request, call_next):
     timestamps = _rate_limit_counts[api_key]
     _rate_limit_counts[api_key] = [t for t in timestamps if t > window_start]
     if len(_rate_limit_counts[api_key]) >= _RATE_LIMIT_MAX:
+        global _rate_limited_total
+        _rate_limited_total += 1
         return JSONResponse(
             status_code=429,
             content={"error": {"code": 429, "message": "Rate limit exceeded", "request_id": "-"}},
@@ -243,8 +277,14 @@ def list_alumni(
     dependencies=[Depends(_require_api_key)],
 )
 def get_alumni(alumni_id: str):
-    profiles = _get_profiles()
-    profile = next((p for p in profiles if p["alumni_id"] == alumni_id), None)
+    repo = getattr(app.state, "repo", None)
+    if repo is not None:
+        profile = repo.get_alumni_by_id(alumni_id)
+    else:
+        # Fallback for contexts where lifespan did not run (e.g. module-level
+        # TestClient without a context manager).
+        profiles = _get_profiles()
+        profile = next((p for p in profiles if p["alumni_id"] == alumni_id), None)
     if profile is None:
         raise HTTPException(status_code=404, detail="Alumni not found")
     return profile
@@ -284,6 +324,34 @@ def match(request: MatchRequest):
         "limit": request.limit,
         "offset": request.offset,
         "results": results,
+    }
+
+
+@router.get(
+    "/version",
+    summary="Service version",
+    description="Returns the service name, version, and environment. No authentication required.",
+    tags=["System"],
+)
+def version():
+    payload = {"service": _SERVICE_NAME, "version": _SERVICE_VERSION}
+    if _ENVIRONMENT:
+        payload["environment"] = _ENVIRONMENT
+    return payload
+
+
+@router.get(
+    "/metrics",
+    summary="In-process request counters",
+    description="Returns cumulative request counters since last process start. No authentication required. Counters are process-local and reset on restart.",
+    tags=["System"],
+)
+def metrics():
+    return {
+        "requests_total": _requests_total,
+        "requests_by_status": dict(_requests_by_status),
+        "errors_total": _errors_total,
+        "rate_limited_total": _rate_limited_total,
     }
 
 

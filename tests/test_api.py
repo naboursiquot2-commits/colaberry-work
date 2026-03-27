@@ -331,3 +331,62 @@ def test_match_endpoint_skills_exceeding_max_length_returns_422():
     error = response.json()["error"]
     assert error["code"] == 422
     assert error["message"] == "Validation error"
+
+
+def test_metrics_endpoint_returns_200():
+    """
+    GET /v1/metrics must return HTTP 200.
+    """
+    response = client.get("/v1/metrics")
+    assert response.status_code == 200
+
+
+def test_metrics_endpoint_returns_expected_keys():
+    """
+    GET /v1/metrics must return a JSON object containing the four
+    expected counter fields.
+    """
+    response = client.get("/v1/metrics")
+    assert response.status_code == 200
+    data = response.json()
+    assert "requests_total" in data
+    assert "requests_by_status" in data
+    assert "errors_total" in data
+    assert "rate_limited_total" in data
+
+
+def test_metrics_endpoint_does_not_require_api_key():
+    """
+    GET /v1/metrics must be accessible without an x-api-key header
+    and must not return 401.
+    """
+    response = client.get("/v1/metrics")
+    assert response.status_code != 401
+
+
+def test_version_endpoint_returns_200():
+    """
+    GET /v1/version must return HTTP 200.
+    """
+    response = client.get("/v1/version")
+    assert response.status_code == 200
+
+
+def test_version_endpoint_returns_expected_keys():
+    """
+    GET /v1/version must return a JSON object containing service and version fields.
+    """
+    response = client.get("/v1/version")
+    assert response.status_code == 200
+    data = response.json()
+    assert "service" in data
+    assert "version" in data
+
+
+def test_version_endpoint_does_not_require_api_key():
+    """
+    GET /v1/version must be accessible without an x-api-key header
+    and must not return 401.
+    """
+    response = client.get("/v1/version")
+    assert response.status_code != 401
