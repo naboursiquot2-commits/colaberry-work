@@ -296,6 +296,62 @@ curl -X POST "http://localhost:8000/v1/alumni" \
 
 ---
 
+## 10. Update Alumni (DB mode only)
+
+Fully replaces the mutable fields of an existing alumni profile. `alumni_id` comes from the URL — do not include it in the request body.
+
+### Request
+```bash
+curl -X PUT "http://localhost:8000/v1/alumni/A001" \
+  -H "Content-Type: application/json" \
+  -H "x-api-key: dev-secret-key" \
+  -d '{
+    "full_name": "Alice Smith-Jones",
+    "email": "alice.updated@example.com",
+    "skills": ["python", "sql", "machine learning"],
+    "interests": ["mentorship", "coaching"],
+    "location": "NY",
+    "engagement_score": 0.90,
+    "availability": "limited"
+  }'
+```
+
+### Response (200 OK)
+```json
+{
+  "alumni_id": "A001",
+  "full_name": "Alice Smith-Jones",
+  "email": "alice.updated@example.com",
+  "skills": ["python", "sql", "machine learning"],
+  "interests": ["mentorship", "coaching"],
+  "location": "NY",
+  "engagement_score": 0.9,
+  "availability": "limited"
+}
+```
+
+### Response — not found (404)
+```json
+{"error": {"code": 404, "message": "Alumni not found", "request_id": "..."}}
+```
+
+### Response — email conflict (409)
+```json
+{"error": {"code": 409, "message": "Conflict: email already exists", "request_id": "..."}}
+```
+
+### Response — alumni_id in body (422)
+```json
+{"error": {"code": 422, "message": "Validation error", "request_id": "..."}}
+```
+
+### Response — CSV mode (503)
+```json
+{"error": {"code": 503, "message": "CsvAlumniRepository is read-only. Set DATABASE_PATH to a seeded SQLite database to enable writes.", "request_id": "..."}}
+```
+
+---
+
 ## Interactive API Documentation
 
 Open in your browser:

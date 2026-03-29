@@ -263,6 +263,88 @@ Returns the created `AlumniProfile` — the same shape as `GET /v1/alumni/{alumn
 
 ---
 
+## Endpoint: PUT /v1/alumni/{alumni_id}
+
+### Purpose
+Fully replaces the mutable fields of the alumni identified by `alumni_id`. `alumni_id` is immutable — it comes from the URL path and must not appear in the request body. Requires a DB-backed deployment (`DATABASE_PATH` must be set). Returns 503 in CSV mode.
+
+### Authentication
+Requires API key in the request header.
+
+```
+x-api-key: <API_KEY>
+```
+
+---
+
+### Path Parameters
+
+| Parameter | Type | Required | Description |
+|---|---|---|---|
+| `alumni_id` | string | Yes | The immutable identifier of the alumni profile to replace |
+
+---
+
+### Request Body Fields
+
+| Field | Type | Required | Constraints |
+|---|---|---|---|
+| `full_name` | string | Yes | Non-empty after strip |
+| `email` | string | Yes | Must contain `@`; non-empty after strip |
+| `skills` | list[string] | No (default `[]`) | Max 50 items; each item non-empty after strip; stored lowercase |
+| `interests` | list[string] | No (default `[]`) | Max 50 items; each item non-empty after strip; stored lowercase |
+| `location` | string | Yes | Non-empty after strip |
+| `engagement_score` | float | Yes | `0.0 ≤ value ≤ 1.0` (pre-normalized) |
+| `availability` | string | Yes | Non-empty after strip |
+| `alumni_id` | — | Forbidden | Including `alumni_id` in the body returns 422 |
+
+---
+
+### Response (200 OK)
+
+Returns the updated `AlumniProfile` — the same shape as `GET /v1/alumni/{alumni_id}`.
+
+```json
+{
+  "alumni_id": "A001",
+  "full_name": "Alice Smith-Jones",
+  "email": "alice.updated@example.com",
+  "skills": ["python", "sql", "machine learning"],
+  "interests": ["mentorship", "coaching"],
+  "location": "NY",
+  "engagement_score": 0.90,
+  "availability": "limited"
+}
+```
+
+---
+
+### Error Responses
+
+#### 401 Unauthorized — missing or wrong API key
+
+#### 404 Not Found — alumni_id does not exist
+
+```json
+{"error": {"code": 404, "message": "Alumni not found", "request_id": "..."}}
+```
+
+#### 409 Conflict — new email already belongs to a different record
+
+```json
+{"error": {"code": 409, "message": "Conflict: email already exists", "request_id": "..."}}
+```
+
+#### 422 Validation Error — field constraint violated or alumni_id present in body
+
+#### 503 Service Unavailable — active repository is read-only (CSV mode)
+
+```json
+{"error": {"code": 503, "message": "CsvAlumniRepository is read-only. Set DATABASE_PATH to a seeded SQLite database to enable writes.", "request_id": "..."}}
+```
+
+---
+
 ## Endpoint: GET /v1/alumni/{alumni_id}
 
 ### Purpose

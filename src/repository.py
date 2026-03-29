@@ -1,7 +1,7 @@
 """
 src/repository.py
 
-Alumni data-access layer: interface, exception, and concrete implementations.
+Alumni data-access layer: interface, exceptions, and concrete implementations.
 
 AlumniRepository defines the contract all data sources must satisfy.
 Current implementations:
@@ -13,10 +13,11 @@ src/matching_engine.py. Switching implementations requires a one-line change
 in the lifespan context manager in src/api.py.
 
 Write operations:
-    create_alumni() is defined on the interface and implemented only in
-    SqliteAlumniRepository. CsvAlumniRepository raises NotImplementedError —
-    writes require a DB-backed deployment (DATABASE_PATH must be set).
-    Each write opens a fresh connection so it sees the latest committed state.
+    create_alumni() and update_alumni() are defined on the interface and
+    implemented only in SqliteAlumniRepository. CsvAlumniRepository raises
+    NotImplementedError — writes require a DB-backed deployment
+    (DATABASE_PATH must be set). Each write opens a fresh connection so it
+    sees the latest committed state.
 """
 
 from __future__ import annotations
@@ -26,7 +27,8 @@ import abc
 
 class AlumniAlreadyExistsError(Exception):
     """
-    Raised by create_alumni() when a uniqueness constraint is violated.
+    Raised by create_alumni() or update_alumni() when a uniqueness constraint
+    is violated.
 
     Attributes:
         field — the conflicting field name: "alumni_id" or "email"
@@ -37,6 +39,20 @@ class AlumniAlreadyExistsError(Exception):
         self.field = field
         self.value = value
         super().__init__(f"{field} already exists: {value}")
+
+
+class AlumniNotFoundError(Exception):
+    """
+    Raised by update_alumni() when the target alumni_id does not exist in
+    the data store.
+
+    Attributes:
+        alumni_id — the identifier that was not found
+    """
+
+    def __init__(self, alumni_id: str) -> None:
+        self.alumni_id = alumni_id
+        super().__init__(f"Alumni not found: {alumni_id}")
 
 
 class AlumniRepository(abc.ABC):
@@ -63,6 +79,24 @@ class AlumniRepository(abc.ABC):
 
         Raises:
             AlumniAlreadyExistsError — if alumni_id or email already exists.
+            NotImplementedError      — if the implementation does not support writes.
+        """
+
+    @abc.abstractmethod
+    def update_alumni(self, alumni_id: str, profile: dict) -> dict:
+        """
+        Fully replace the mutable fields of an existing alumni profile.
+
+        alumni_id identifies the record to update. profile must contain the
+        seven mutable fields (full_name, email, skills, interests, location,
+        engagement_score, availability), already normalized. alumni_id must
+        not be present in profile.
+
+        Returns the updated profile dict including alumni_id.
+
+        Raises:
+            AlumniNotFoundError      — if alumni_id does not exist.
+            AlumniAlreadyExistsError — if the new email is held by a different record.
             NotImplementedError      — if the implementation does not support writes.
         """
 
@@ -95,6 +129,12 @@ class CsvAlumniRepository(AlumniRepository):
             "Set DATABASE_PATH to a seeded SQLite database to enable writes."
         )
 
+    def update_alumni(self, alumni_id: str, profile: dict) -> dict:
+        raise NotImplementedError(
+            "CsvAlumniRepository is read-only. "
+            "Set DATABASE_PATH to a seeded SQLite database to enable writes."
+        )
+
 
 class SqliteAlumniRepository(AlumniRepository):
     """
@@ -103,10 +143,14 @@ class SqliteAlumniRepository(AlumniRepository):
     Profiles are loaded once at construction and held in memory,
     matching the startup-load behaviour of the CSV path.
 
-    create_alumni() opens a fresh connection per call so writes see the
-    latest committed state. After a successful insert the in-memory cache
-    is updated so subsequent get_all_alumni() and get_alumni_by_id() calls
-    reflect the new profile without requiring a restart.
+    create_alumni() and update_alumni() each open a fresh connection per call
+    so writes see the latest committed state. After a successful write the
+    in-memory cache is updated so subsequent reads reflect the change without
+    requiring a restart.
+
+    Cache and app.state.profiles share the same list object (assigned once at
+    startup via repo.get_all_alumni()). In-place mutations to self._profiles
+    are immediately visible to _get_profiles() and rank_alumni().
     """
 
     def __init__(self, db_path: str) -> None:
@@ -160,3 +204,44 @@ class SqliteAlumniRepository(AlumniRepository):
         created = dict(profile)
         self._profiles.append(created)
         return created
+
+    def update_alumni(self, alumni_id: str, profile: dict) -> dict:
+        import json
+        import sqlite3 as _sqlite3
+
+        row = (
+            profile["full_name"],
+            profile["email"],
+            json.dumps(profile["skills"]),
+            json.dumps(profile["interests"]),
+            profile["location"],
+            profile["engagement_score"],
+            profile["availability"],
+            alumni_id,  # WHERE clause
+        )
+        con = _sqlite3.connect(self._db_path)
+        try:
+            cursor = con.execute(
+                "UPDATE alumni SET "
+                "full_name=?, email=?, skills=?, interests=?, "
+                "location=?, engagement_score=?, availability=? "
+                "WHERE alumni_id=?",
+                row,
+            )
+            if cursor.rowcount == 0:
+                raise AlumniNotFoundError(alumni_id)
+            con.commit()
+        except _sqlite3.IntegrityError as exc:
+            # The only UPDATE constraint that can fire is the email UNIQUE index.
+            # alumni_id is not being changed so its uniqueness cannot be violated.
+            raise AlumniAlreadyExistsError("email", profile["email"]) from exc
+        finally:
+            con.close()
+
+        # Replace the matching element in the in-memory cache in place.
+        updated = {"alumni_id": alumni_id, **profile}
+        for i, p in enumerate(self._profiles):
+            if p["alumni_id"] == alumni_id:
+                self._profiles[i] = updated
+                break
+        return updated

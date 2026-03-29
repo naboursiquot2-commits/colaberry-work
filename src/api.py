@@ -9,12 +9,17 @@ from contextvars import ContextVar
 from fastapi import APIRouter, Depends, FastAPI, Header, HTTPException, Query, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from pythonjsonlogger import json as jsonlogger
 
 from src.matching_engine import load_alumni_profiles_csv, rank_alumni
-from src.repository import AlumniAlreadyExistsError, CsvAlumniRepository, SqliteAlumniRepository
+from src.repository import (
+    AlumniAlreadyExistsError,
+    AlumniNotFoundError,
+    CsvAlumniRepository,
+    SqliteAlumniRepository,
+)
 
 _API_KEY = os.getenv("API_KEY")
 if not _API_KEY:
@@ -102,6 +107,56 @@ class CreateAlumniRequest(BaseModel):
     availability: str
 
     @field_validator("alumni_id", "full_name", "location", "availability", mode="before")
+    @classmethod
+    def _strip_and_reject_empty_str(cls, v):
+        if isinstance(v, str):
+            stripped = v.strip()
+            if not stripped:
+                raise ValueError("must not be empty or whitespace-only")
+            return stripped
+        return v
+
+    @field_validator("email", mode="before")
+    @classmethod
+    def _validate_email(cls, v):
+        if isinstance(v, str):
+            stripped = v.strip()
+            if not stripped:
+                raise ValueError("must not be empty or whitespace-only")
+            if "@" not in stripped:
+                raise ValueError("must be a valid email address")
+            return stripped
+        return v
+
+    @field_validator("skills", "interests", mode="before")
+    @classmethod
+    def _normalize_list(cls, v):
+        if not isinstance(v, list):
+            return v
+        result = []
+        for item in v:
+            if not isinstance(item, str):
+                result.append(item)
+                continue
+            stripped = item.strip()
+            if not stripped:
+                raise ValueError("items must not be empty or whitespace-only")
+            result.append(stripped.lower())
+        return result
+
+
+class UpdateAlumniRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    full_name: str
+    email: str
+    skills: list[str] = Field(default=[], max_length=50)
+    interests: list[str] = Field(default=[], max_length=50)
+    location: str
+    engagement_score: float = Field(ge=0.0, le=1.0)
+    availability: str
+
+    @field_validator("full_name", "location", "availability", mode="before")
     @classmethod
     def _strip_and_reject_empty_str(cls, v):
         if isinstance(v, str):
@@ -365,6 +420,44 @@ def create_alumni_profile(body: CreateAlumniRequest):
         )
     try:
         profile = repo.create_alumni(body.model_dump())
+    except NotImplementedError as exc:
+        raise HTTPException(status_code=503, detail=str(exc))
+    except AlumniAlreadyExistsError as exc:
+        raise HTTPException(
+            status_code=409,
+            detail=f"Conflict: {exc.field} already exists",
+        )
+    return profile
+
+
+@router.put(
+    "/alumni/{alumni_id}",
+    response_model=AlumniProfile,
+    status_code=200,
+    summary="Replace an alumni profile",
+    description=(
+        "Fully replaces the mutable fields of the alumni identified by alumni_id. "
+        "alumni_id is immutable and must not be included in the request body. "
+        "Requires a DB-backed deployment (DATABASE_PATH must be set). "
+        "Returns 503 in CSV mode."
+    ),
+    tags=["Alumni"],
+    dependencies=[Depends(_require_api_key)],
+)
+def update_alumni_profile(alumni_id: str, body: UpdateAlumniRequest):
+    repo = getattr(app.state, "repo", None)
+    if repo is None:
+        raise HTTPException(
+            status_code=503,
+            detail=(
+                "CsvAlumniRepository is read-only. "
+                "Set DATABASE_PATH to a seeded SQLite database to enable writes."
+            ),
+        )
+    try:
+        profile = repo.update_alumni(alumni_id, body.model_dump())
+    except AlumniNotFoundError:
+        raise HTTPException(status_code=404, detail="Alumni not found")
     except NotImplementedError as exc:
         raise HTTPException(status_code=503, detail=str(exc))
     except AlumniAlreadyExistsError as exc:

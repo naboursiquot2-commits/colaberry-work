@@ -20,6 +20,7 @@ import pytest
 from execution.seed_database import DEFAULT_CSV_PATH, seed
 from src.repository import (
     AlumniAlreadyExistsError,
+    AlumniNotFoundError,
     AlumniRepository,
     CsvAlumniRepository,
     SqliteAlumniRepository,
@@ -257,3 +258,91 @@ def test_csv_repo_create_alumni_raises_not_implemented(csv_repo):
     """CsvAlumniRepository.create_alumni() must raise NotImplementedError."""
     with pytest.raises(NotImplementedError):
         csv_repo.create_alumni(_NEW_PROFILE)
+
+
+# ---------------------------------------------------------------------------
+# 7. update_alumni — SqliteAlumniRepository
+# ---------------------------------------------------------------------------
+
+_UPDATED_FIELDS = {
+    "full_name": "Alice Smith-Jones",
+    "email": "alice.updated@example.com",
+    "skills": ["python", "ml"],
+    "interests": ["coaching"],
+    "location": "NY",
+    "engagement_score": 0.90,
+    "availability": "limited",
+}
+
+
+def test_sqlite_repo_update_alumni_returns_updated_dict(sqlite_repo):
+    """update_alumni() must return a dict with all eight required keys."""
+    result = sqlite_repo.update_alumni("A001", _UPDATED_FIELDS)
+    assert isinstance(result, dict)
+    required = {"alumni_id", "full_name", "email", "skills", "interests",
+                "location", "engagement_score", "availability"}
+    assert required.issubset(result.keys())
+    assert result["alumni_id"] == "A001"
+    assert result["full_name"] == _UPDATED_FIELDS["full_name"]
+
+
+def test_sqlite_repo_update_alumni_persists_to_database(sqlite_repo, seeded_db):
+    """update_alumni() must write the changes to the SQLite file."""
+    sqlite_repo.update_alumni("A001", _UPDATED_FIELDS)
+
+    con = sqlite3.connect(seeded_db)
+    row = con.execute(
+        "SELECT full_name, email FROM alumni WHERE alumni_id = ?", ("A001",)
+    ).fetchone()
+    con.close()
+
+    assert row is not None
+    assert row[0] == _UPDATED_FIELDS["full_name"]
+    assert row[1] == _UPDATED_FIELDS["email"]
+
+
+def test_sqlite_repo_update_alumni_updates_in_memory_cache_via_get_all(sqlite_repo):
+    """After update_alumni(), get_all_alumni() must reflect the new values."""
+    sqlite_repo.update_alumni("A001", _UPDATED_FIELDS)
+    profiles = {p["alumni_id"]: p for p in sqlite_repo.get_all_alumni()}
+    assert profiles["A001"]["full_name"] == _UPDATED_FIELDS["full_name"]
+
+
+def test_sqlite_repo_update_alumni_findable_with_new_values_via_get_by_id(sqlite_repo):
+    """After update_alumni(), get_alumni_by_id() must return the updated profile."""
+    sqlite_repo.update_alumni("A001", _UPDATED_FIELDS)
+    profile = sqlite_repo.get_alumni_by_id("A001")
+    assert profile is not None
+    assert profile["email"] == _UPDATED_FIELDS["email"]
+
+
+def test_sqlite_repo_update_alumni_not_found_raises(sqlite_repo):
+    """update_alumni() with a missing alumni_id must raise AlumniNotFoundError."""
+    with pytest.raises(AlumniNotFoundError) as exc_info:
+        sqlite_repo.update_alumni("DOES_NOT_EXIST", _UPDATED_FIELDS)
+    assert exc_info.value.alumni_id == "DOES_NOT_EXIST"
+
+
+def test_sqlite_repo_update_alumni_email_conflict_raises(sqlite_repo):
+    """update_alumni() with another alumni's email must raise AlumniAlreadyExistsError."""
+    with pytest.raises(AlumniAlreadyExistsError) as exc_info:
+        # bob@example.com belongs to A002
+        sqlite_repo.update_alumni("A001", {**_UPDATED_FIELDS, "email": "bob@example.com"})
+    assert exc_info.value.field == "email"
+
+
+def test_sqlite_repo_update_alumni_same_email_succeeds(sqlite_repo):
+    """update_alumni() with the same email (no change) must not raise."""
+    result = sqlite_repo.update_alumni("A001", {**_UPDATED_FIELDS, "email": "alice@example.com"})
+    assert result["alumni_id"] == "A001"
+    assert result["email"] == "alice@example.com"
+
+
+# ---------------------------------------------------------------------------
+# 8. update_alumni — CsvAlumniRepository (read-only guard)
+# ---------------------------------------------------------------------------
+
+def test_csv_repo_update_alumni_raises_not_implemented(csv_repo):
+    """CsvAlumniRepository.update_alumni() must raise NotImplementedError."""
+    with pytest.raises(NotImplementedError):
+        csv_repo.update_alumni("A001", _UPDATED_FIELDS)
