@@ -25,11 +25,81 @@ jobs:
       - name: Validate dataset
         run: python execution/validate_sample_dataset.py
 
+      # ------------------------------------------------------------------
+      # Migration validation — runs before the main test suite so that a
+      # broken migration is caught as its own failing step rather than as
+      # a confusing test failure deep in the suite.
+      # ------------------------------------------------------------------
+
+      - name: Validate migrations (fresh database)
+        # Proves that migrate_database.py can bring a brand-new empty
+        # database from version 0 to the latest schema version cleanly.
+        run: python execution/migrate_database.py --db /tmp/ci_fresh.db
+
+      - name: Validate migrations (legacy database upgrade)
+        # Proves the bootstrap path: a database that has the alumni table
+        # but no schema_version table (created by the old seed_database.py
+        # before migration support was added) is correctly detected and
+        # upgraded without touching existing data.
+        run: |
+          python -c "
+          import sqlite3
+          con = sqlite3.connect('/tmp/ci_legacy.db')
+          con.execute('''
+              CREATE TABLE alumni (
+                  alumni_id        TEXT PRIMARY KEY,
+                  full_name        TEXT NOT NULL,
+                  email            TEXT NOT NULL UNIQUE,
+                  skills           TEXT NOT NULL DEFAULT '[]',
+                  interests        TEXT NOT NULL DEFAULT '[]',
+                  location         TEXT NOT NULL DEFAULT '',
+                  engagement_score REAL NOT NULL DEFAULT 0.0,
+                  availability     TEXT NOT NULL DEFAULT ''
+              )
+          ''')
+          con.execute(
+              'INSERT INTO alumni (alumni_id, full_name, email, location, availability) '
+              'VALUES (?, ?, ?, ?, ?)',
+              ('A001', 'Alice Smith', 'alice@example.com', 'NY', 'mentor')
+          )
+          con.commit()
+          con.close()
+          print('Legacy DB created at /tmp/ci_legacy.db')
+          "
+          python execution/migrate_database.py --db /tmp/ci_legacy.db
+          python -c "
+          import sqlite3
+          con = sqlite3.connect('/tmp/ci_legacy.db')
+          version = con.execute('SELECT MAX(version) FROM schema_version').fetchone()[0]
+          count   = con.execute('SELECT COUNT(*) FROM alumni').fetchone()[0]
+          con.close()
+          assert version == 2, f'Expected schema version 2, got {version}'
+          assert count == 1,   f'Expected 1 alumni row, got {count}'
+          print(f'Legacy upgrade verified: schema_version={version}, alumni_count={count}')
+          "
+
+      # ------------------------------------------------------------------
+      # Main test suite — includes test_migrations.py, test_seed_database.py,
+      # test_db.py, and all API tests.
+      # ------------------------------------------------------------------
+
       - name: Run tests
         run: python -m pytest -v
 
       - name: Run deterministic golden run
         run: python execution/run_match_local.py
+
+      # ------------------------------------------------------------------
+      # DB-mode validation — explicit migrate then seed so the two-step
+      # initialization is exercised the same way as in the Dockerfile.
+      # ------------------------------------------------------------------
+
+      - name: Migrate database
+        # Applies any pending migrations to data/alumni.db.  On a clean
+        # checkout this brings the database from version 0 to latest.
+        # The subsequent seed step calls migrate() internally; it will be
+        # a no-op since the schema is already current after this step.
+        run: python execution/migrate_database.py
 
       - name: Seed database
         run: python execution/seed_database.py

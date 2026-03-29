@@ -9,6 +9,15 @@ COPY src/ ./src/
 COPY data/ ./data/
 COPY execution/ ./execution/
 
+# Phase 1: apply all pending schema migrations.
+# Creates the alumni and schema_version tables on a fresh build; upgrades
+# existing databases on a rebuild.  Runs before seeding so the schema is
+# always current before any data is written.
+RUN python execution/migrate_database.py
+
+# Phase 2: upsert alumni data from the CSV source.
+# migrate_database.py already ran above, so the migrate() call inside seed()
+# is a no-op here — it just confirms the schema is current.
 RUN python execution/seed_database.py
 
 RUN adduser --disabled-password --gecos "" appuser && \
