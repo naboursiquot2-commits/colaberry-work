@@ -4,8 +4,9 @@ execution/seed_database.py
 Seeds the SQLite alumni database from the CSV source file.
 
 What it does:
-    1. Reads data/sample_alumni.csv (or a custom CSV path)
-    2. Creates the alumni table if it does not exist
+    1. Calls migrate_database.migrate() to bring the schema to the latest
+       version (creates tables on first run; upgrades legacy databases)
+    2. Reads data/sample_alumni.csv (or a custom CSV path)
     3. Upserts every row using INSERT OR REPLACE
 
 Idempotency guarantee:
@@ -42,23 +43,6 @@ _REPO_ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_CSV_PATH = str(_REPO_ROOT / "data" / "sample_alumni.csv")
 DEFAULT_DB_PATH = str(_REPO_ROOT / "data" / "alumni.db")
 
-
-# ---------------------------------------------------------------------------
-# Schema
-# ---------------------------------------------------------------------------
-
-_CREATE_TABLE = """
-CREATE TABLE IF NOT EXISTS alumni (
-    alumni_id        TEXT PRIMARY KEY,
-    full_name        TEXT NOT NULL,
-    email            TEXT NOT NULL UNIQUE,
-    skills           TEXT NOT NULL DEFAULT '[]',
-    interests        TEXT NOT NULL DEFAULT '[]',
-    location         TEXT NOT NULL DEFAULT '',
-    engagement_score REAL NOT NULL DEFAULT 0.0,
-    availability     TEXT NOT NULL DEFAULT ''
-);
-"""
 
 _UPSERT = """
 INSERT OR REPLACE INTO alumni
@@ -101,8 +85,9 @@ def seed(csv_path: str = DEFAULT_CSV_PATH, db_path: str = DEFAULT_DB_PATH) -> in
     """
     Seed the SQLite database at db_path from the CSV at csv_path.
 
-    Creates the alumni table if it does not exist, then upserts every row.
-    Returns the number of rows upserted.
+    Runs schema migrations first to ensure the database is at the latest
+    version, then upserts every row from the CSV. Returns the number of
+    rows upserted.
 
     Idempotent: safe to call multiple times. Each call produces the same
     final database state.
@@ -110,9 +95,17 @@ def seed(csv_path: str = DEFAULT_CSV_PATH, db_path: str = DEFAULT_DB_PATH) -> in
     if not Path(csv_path).exists():
         raise FileNotFoundError(f"CSV source not found: {csv_path}")
 
+    # Ensure the schema is current before writing data.
+    # The try/except handles both module-import (execution.migrate_database)
+    # and script-execution (migrate_database on sys.path) contexts.
+    try:
+        from execution.migrate_database import migrate as _migrate
+    except ImportError:
+        from migrate_database import migrate as _migrate  # type: ignore[no-redef]
+    _migrate(db_path)
+
     con = sqlite3.connect(db_path)
     try:
-        con.execute(_CREATE_TABLE)
         count = 0
 
         with open(csv_path, newline="", encoding="utf-8") as f:

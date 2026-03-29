@@ -160,6 +160,32 @@ Rate limiting is implemented in-memory, local to each uvicorn worker process.
 
 ---
 
+## 5. Running Database Migrations
+
+Schema migrations are managed by `execution/migrate_database.py`. They run automatically when `seed_database.py` is called, but can also be run explicitly.
+
+**Apply all pending migrations (interactive / CI):**
+```bash
+python execution/migrate_database.py
+python execution/migrate_database.py --db data/alumni.db
+```
+
+Exits 0 on success (including "already up to date"). Exits 1 on failure with a message identifying the failing migration file.
+
+**Check the current schema version:**
+```bash
+sqlite3 data/alumni.db "SELECT version, description, applied_at FROM schema_version ORDER BY version;"
+```
+
+**Seed a fresh database (runs migrations automatically):**
+```bash
+python execution/seed_database.py
+```
+
+**Legacy database upgrade** (database created before migration support was added): run `migrate_database.py` once. It detects the pre-existing `alumni` table, creates `schema_version`, and stamps it at the current version without modifying any data.
+
+---
+
 ## First Three Commands During Any Triage
 
 ```bash
