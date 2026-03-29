@@ -20,6 +20,7 @@ from src.repository import (
     CsvAlumniRepository,
     SqliteAlumniRepository,
 )
+from fastapi.responses import Response
 
 _API_KEY = os.getenv("API_KEY")
 if not _API_KEY:
@@ -466,6 +467,42 @@ def update_alumni_profile(alumni_id: str, body: UpdateAlumniRequest):
             detail=f"Conflict: {exc.field} already exists",
         )
     return profile
+
+
+@router.delete(
+    "/alumni/{alumni_id}",
+    status_code=204,
+    summary="Delete an alumni profile",
+    description=(
+        "Permanently removes the alumni identified by alumni_id. "
+        "Requires a DB-backed deployment (DATABASE_PATH must be set). "
+        "Returns 503 in CSV mode."
+    ),
+    tags=["Alumni"],
+    dependencies=[Depends(_require_api_key)],
+)
+def delete_alumni_profile(alumni_id: str):
+    repo = getattr(app.state, "repo", None)
+    if repo is None:
+        raise HTTPException(
+            status_code=503,
+            detail=(
+                "CsvAlumniRepository is read-only. "
+                "Set DATABASE_PATH to a seeded SQLite database to enable writes."
+            ),
+        )
+    try:
+        repo.delete_alumni(alumni_id)
+    except AlumniNotFoundError:
+        raise HTTPException(status_code=404, detail="Alumni not found")
+    except NotImplementedError as exc:
+        raise HTTPException(status_code=503, detail=str(exc))
+    # Rebuild app.state.profiles from the updated repository cache.
+    # delete_alumni() replaces self._profiles with a new list object, so
+    # app.state.profiles must be reassigned (unlike create/update which
+    # mutate the existing list in place).
+    app.state.profiles = repo.get_all_alumni()
+    return Response(status_code=204)
 
 
 @router.post(

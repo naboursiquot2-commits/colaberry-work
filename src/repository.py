@@ -13,11 +13,11 @@ src/matching_engine.py. Switching implementations requires a one-line change
 in the lifespan context manager in src/api.py.
 
 Write operations:
-    create_alumni() and update_alumni() are defined on the interface and
-    implemented only in SqliteAlumniRepository. CsvAlumniRepository raises
-    NotImplementedError — writes require a DB-backed deployment
-    (DATABASE_PATH must be set). Each write opens a fresh connection so it
-    sees the latest committed state.
+    create_alumni(), update_alumni(), and delete_alumni() are defined on the
+    interface and implemented only in SqliteAlumniRepository.
+    CsvAlumniRepository raises NotImplementedError — writes require a
+    DB-backed deployment (DATABASE_PATH must be set). Each write opens a
+    fresh connection so it sees the latest committed state.
 """
 
 from __future__ import annotations
@@ -43,8 +43,8 @@ class AlumniAlreadyExistsError(Exception):
 
 class AlumniNotFoundError(Exception):
     """
-    Raised by update_alumni() when the target alumni_id does not exist in
-    the data store.
+    Raised by update_alumni() or delete_alumni() when the target alumni_id
+    does not exist in the data store.
 
     Attributes:
         alumni_id — the identifier that was not found
@@ -100,6 +100,16 @@ class AlumniRepository(abc.ABC):
             NotImplementedError      — if the implementation does not support writes.
         """
 
+    @abc.abstractmethod
+    def delete_alumni(self, alumni_id: str) -> None:
+        """
+        Permanently remove the alumni identified by alumni_id.
+
+        Raises:
+            AlumniNotFoundError — if alumni_id does not exist.
+            NotImplementedError — if the implementation does not support writes.
+        """
+
 
 class CsvAlumniRepository(AlumniRepository):
     """
@@ -130,6 +140,12 @@ class CsvAlumniRepository(AlumniRepository):
         )
 
     def update_alumni(self, alumni_id: str, profile: dict) -> dict:
+        raise NotImplementedError(
+            "CsvAlumniRepository is read-only. "
+            "Set DATABASE_PATH to a seeded SQLite database to enable writes."
+        )
+
+    def delete_alumni(self, alumni_id: str) -> None:
         raise NotImplementedError(
             "CsvAlumniRepository is read-only. "
             "Set DATABASE_PATH to a seeded SQLite database to enable writes."
@@ -245,3 +261,24 @@ class SqliteAlumniRepository(AlumniRepository):
                 self._profiles[i] = updated
                 break
         return updated
+
+    def delete_alumni(self, alumni_id: str) -> None:
+        import sqlite3 as _sqlite3
+
+        con = _sqlite3.connect(self._db_path)
+        try:
+            cursor = con.execute(
+                "DELETE FROM alumni WHERE alumni_id = ?", (alumni_id,)
+            )
+            con.commit()
+        finally:
+            con.close()
+
+        if cursor.rowcount == 0:
+            raise AlumniNotFoundError(alumni_id)
+
+        # Rebuild the in-memory cache without the deleted profile.
+        # List comprehension produces a new list object; the API route
+        # is responsible for re-syncing app.state.profiles via
+        # repo.get_all_alumni() after this method returns.
+        self._profiles = [p for p in self._profiles if p["alumni_id"] != alumni_id]

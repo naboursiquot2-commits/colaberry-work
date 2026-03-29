@@ -346,3 +346,56 @@ def test_csv_repo_update_alumni_raises_not_implemented(csv_repo):
     """CsvAlumniRepository.update_alumni() must raise NotImplementedError."""
     with pytest.raises(NotImplementedError):
         csv_repo.update_alumni("A001", _UPDATED_FIELDS)
+
+
+# ---------------------------------------------------------------------------
+# 9. delete_alumni — SqliteAlumniRepository
+# ---------------------------------------------------------------------------
+
+def test_sqlite_repo_delete_alumni_removes_from_database(sqlite_repo, seeded_db):
+    """delete_alumni() must remove the row from the SQLite file."""
+    sqlite_repo.delete_alumni("A001")
+
+    con = sqlite3.connect(seeded_db)
+    row = con.execute(
+        "SELECT alumni_id FROM alumni WHERE alumni_id = ?", ("A001",)
+    ).fetchone()
+    con.close()
+
+    assert row is None
+
+
+def test_sqlite_repo_delete_alumni_removed_from_get_all(sqlite_repo):
+    """After delete_alumni(), get_all_alumni() must not contain the deleted ID."""
+    sqlite_repo.delete_alumni("A001")
+    ids = [p["alumni_id"] for p in sqlite_repo.get_all_alumni()]
+    assert "A001" not in ids
+
+
+def test_sqlite_repo_delete_alumni_not_findable_by_get_by_id(sqlite_repo):
+    """After delete_alumni(), get_alumni_by_id() must return None."""
+    sqlite_repo.delete_alumni("A001")
+    assert sqlite_repo.get_alumni_by_id("A001") is None
+
+
+def test_sqlite_repo_delete_alumni_count_decreases(sqlite_repo):
+    """After deleting one of the 6 seeded rows, get_all_alumni() must return 5."""
+    sqlite_repo.delete_alumni("A001")
+    assert len(sqlite_repo.get_all_alumni()) == 5
+
+
+def test_sqlite_repo_delete_alumni_not_found_raises(sqlite_repo):
+    """delete_alumni() with a missing alumni_id must raise AlumniNotFoundError."""
+    with pytest.raises(AlumniNotFoundError) as exc_info:
+        sqlite_repo.delete_alumni("DOES_NOT_EXIST")
+    assert exc_info.value.alumni_id == "DOES_NOT_EXIST"
+
+
+# ---------------------------------------------------------------------------
+# 10. delete_alumni — CsvAlumniRepository (read-only guard)
+# ---------------------------------------------------------------------------
+
+def test_csv_repo_delete_alumni_raises_not_implemented(csv_repo):
+    """CsvAlumniRepository.delete_alumni() must raise NotImplementedError."""
+    with pytest.raises(NotImplementedError):
+        csv_repo.delete_alumni("A001")

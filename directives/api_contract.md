@@ -513,3 +513,55 @@ Example:
   ]
 }
 ```
+
+---
+
+## Endpoint: DELETE /v1/alumni/{alumni_id}
+
+### Purpose
+Permanently removes the alumni profile identified by `alumni_id` from the database and in-memory cache. Hard delete — no soft-delete/tombstone. Requires a DB-backed deployment (`DATABASE_PATH` must be set). Returns 503 in CSV mode.
+
+### Authentication
+Requires API key in the request header.
+
+```
+x-api-key: <API_KEY>
+```
+
+---
+
+### Path Parameters
+
+| Parameter | Type | Required | Description |
+|---|---|---|---|
+| `alumni_id` | string | Yes | The immutable identifier of the alumni profile to delete |
+
+---
+
+### Request Body
+
+None.
+
+---
+
+### Response (204 No Content)
+
+No response body. The resource has been permanently removed.
+
+---
+
+### Error Responses
+
+#### 401 Unauthorized — missing or wrong API key
+
+#### 404 Not Found — alumni_id does not exist
+
+```json
+{"error": {"code": 404, "message": "Alumni not found", "request_id": "..."}}
+```
+
+#### 503 Service Unavailable — active repository is read-only (CSV mode)
+
+```json
+{"error": {"code": 503, "message": "CsvAlumniRepository is read-only. Set DATABASE_PATH to a seeded SQLite database to enable writes.", "request_id": "..."}}
+```

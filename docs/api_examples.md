@@ -352,6 +352,32 @@ curl -X PUT "http://localhost:8000/v1/alumni/A001" \
 
 ---
 
+## 11. Delete Alumni (DB mode only)
+
+Permanently removes an alumni profile. Requires `DATABASE_PATH` to point to a seeded SQLite database.
+
+### Request
+```bash
+curl -X DELETE "http://localhost:8000/v1/alumni/A001" \
+  -H "x-api-key: dev-secret-key"
+```
+
+### Response (204 No Content)
+
+No response body.
+
+### Response — not found (404)
+```json
+{"error": {"code": 404, "message": "Alumni not found", "request_id": "..."}}
+```
+
+### Response — CSV mode (503 Service Unavailable)
+```json
+{"error": {"code": 503, "message": "CsvAlumniRepository is read-only. Set DATABASE_PATH to a seeded SQLite database to enable writes.", "request_id": "..."}}
+```
+
+---
+
 ## Interactive API Documentation
 
 Open in your browser:
