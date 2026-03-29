@@ -249,6 +249,53 @@ curl -X GET "http://localhost:8000/v1/metrics"
 
 ---
 
+## 9. Create Alumni (DB mode only)
+
+Creates a new alumni profile. Requires `DATABASE_PATH` to point to a seeded SQLite database.
+
+### Request
+```bash
+curl -X POST "http://localhost:8000/v1/alumni" \
+  -H "Content-Type: application/json" \
+  -H "x-api-key: dev-secret-key" \
+  -d '{
+    "alumni_id": "A007",
+    "full_name": "Grace Hopper",
+    "email": "grace.hopper@example.com",
+    "skills": ["python", "fortran"],
+    "interests": ["education"],
+    "location": "NY",
+    "engagement_score": 0.85,
+    "availability": "available"
+  }'
+```
+
+### Response (201 Created)
+```json
+{
+  "alumni_id": "A007",
+  "full_name": "Grace Hopper",
+  "email": "grace.hopper@example.com",
+  "skills": ["python", "fortran"],
+  "interests": ["education"],
+  "location": "NY",
+  "engagement_score": 0.85,
+  "availability": "available"
+}
+```
+
+### Response — duplicate alumni_id (409 Conflict)
+```json
+{"error": {"code": 409, "message": "Conflict: alumni_id already exists", "request_id": "..."}}
+```
+
+### Response — CSV mode (503 Service Unavailable)
+```json
+{"error": {"code": 503, "message": "CsvAlumniRepository is read-only. Set DATABASE_PATH to a seeded SQLite database to enable writes.", "request_id": "..."}}
+```
+
+---
+
 ## Interactive API Documentation
 
 Open in your browser:

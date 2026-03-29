@@ -13,10 +13,17 @@ All SQLite tests use a temporary seeded database via tmp_path.
 The real data/alumni.db is never touched.
 """
 
+import sqlite3
+
 import pytest
 
 from execution.seed_database import DEFAULT_CSV_PATH, seed
-from src.repository import AlumniRepository, CsvAlumniRepository, SqliteAlumniRepository
+from src.repository import (
+    AlumniAlreadyExistsError,
+    AlumniRepository,
+    CsvAlumniRepository,
+    SqliteAlumniRepository,
+)
 
 
 # ---------------------------------------------------------------------------
@@ -169,3 +176,84 @@ def test_both_repos_get_alumni_by_id_same_result(csv_repo, sqlite_repo):
 def test_both_repos_return_none_for_missing_id(csv_repo, sqlite_repo):
     assert csv_repo.get_alumni_by_id("MISSING") is None
     assert sqlite_repo.get_alumni_by_id("MISSING") is None
+
+
+# ---------------------------------------------------------------------------
+# 5. create_alumni — SqliteAlumniRepository
+# ---------------------------------------------------------------------------
+
+_NEW_PROFILE = {
+    "alumni_id": "A007",
+    "full_name": "Grace Hopper",
+    "email": "grace.hopper@example.com",
+    "skills": ["python", "fortran"],
+    "interests": ["education"],
+    "location": "NY",
+    "engagement_score": 0.85,
+    "availability": "available",
+}
+
+
+def test_sqlite_repo_create_alumni_returns_profile_dict(sqlite_repo):
+    """create_alumni() must return a dict with all eight required keys."""
+    result = sqlite_repo.create_alumni(_NEW_PROFILE)
+    assert isinstance(result, dict)
+    required = {"alumni_id", "full_name", "email", "skills", "interests",
+                "location", "engagement_score", "availability"}
+    assert required.issubset(result.keys())
+    assert result["alumni_id"] == _NEW_PROFILE["alumni_id"]
+
+
+def test_sqlite_repo_create_alumni_persists_to_database(sqlite_repo, seeded_db):
+    """create_alumni() must write the row to the SQLite file."""
+    sqlite_repo.create_alumni(_NEW_PROFILE)
+
+    con = sqlite3.connect(seeded_db)
+    row = con.execute(
+        "SELECT alumni_id FROM alumni WHERE alumni_id = ?",
+        (_NEW_PROFILE["alumni_id"],),
+    ).fetchone()
+    con.close()
+
+    assert row is not None
+    assert row[0] == _NEW_PROFILE["alumni_id"]
+
+
+def test_sqlite_repo_create_alumni_appears_in_get_all_alumni(sqlite_repo):
+    """After create_alumni(), get_all_alumni() must include the new profile."""
+    sqlite_repo.create_alumni(_NEW_PROFILE)
+    ids = [p["alumni_id"] for p in sqlite_repo.get_all_alumni()]
+    assert _NEW_PROFILE["alumni_id"] in ids
+
+
+def test_sqlite_repo_create_alumni_findable_by_get_alumni_by_id(sqlite_repo):
+    """After create_alumni(), get_alumni_by_id() must return the new profile."""
+    sqlite_repo.create_alumni(_NEW_PROFILE)
+    profile = sqlite_repo.get_alumni_by_id(_NEW_PROFILE["alumni_id"])
+    assert profile is not None
+    assert profile["alumni_id"] == _NEW_PROFILE["alumni_id"]
+
+
+def test_sqlite_repo_create_alumni_duplicate_id_raises(sqlite_repo):
+    """create_alumni() with an existing alumni_id must raise AlumniAlreadyExistsError."""
+    with pytest.raises(AlumniAlreadyExistsError) as exc_info:
+        sqlite_repo.create_alumni({**_NEW_PROFILE, "alumni_id": "A001"})
+    assert exc_info.value.field == "alumni_id"
+
+
+def test_sqlite_repo_create_alumni_duplicate_email_raises(sqlite_repo):
+    """create_alumni() with an existing email must raise AlumniAlreadyExistsError."""
+    with pytest.raises(AlumniAlreadyExistsError) as exc_info:
+        # New alumni_id, but reuse alice@example.com which belongs to A001
+        sqlite_repo.create_alumni({**_NEW_PROFILE, "email": "alice@example.com"})
+    assert exc_info.value.field == "email"
+
+
+# ---------------------------------------------------------------------------
+# 6. create_alumni — CsvAlumniRepository (read-only guard)
+# ---------------------------------------------------------------------------
+
+def test_csv_repo_create_alumni_raises_not_implemented(csv_repo):
+    """CsvAlumniRepository.create_alumni() must raise NotImplementedError."""
+    with pytest.raises(NotImplementedError):
+        csv_repo.create_alumni(_NEW_PROFILE)

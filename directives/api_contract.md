@@ -189,6 +189,80 @@ x-api-key: <your-api-key>
 
 ---
 
+## Endpoint: POST /v1/alumni
+
+### Purpose
+Creates a new alumni profile in the database. Requires a DB-backed deployment (`DATABASE_PATH` must be set and point to a seeded SQLite file). Returns 503 when the active data source is read-only (CSV mode).
+
+### Authentication
+Requires API key in the request header.
+
+```
+x-api-key: <API_KEY>
+```
+
+---
+
+### Request Body Fields
+
+| Field | Type | Required | Constraints |
+|---|---|---|---|
+| `alumni_id` | string | Yes | Non-empty after strip |
+| `full_name` | string | Yes | Non-empty after strip |
+| `email` | string | Yes | Must contain `@`; non-empty after strip |
+| `skills` | list[string] | No (default `[]`) | Max 50 items; each item non-empty after strip; stored lowercase |
+| `interests` | list[string] | No (default `[]`) | Max 50 items; each item non-empty after strip; stored lowercase |
+| `location` | string | Yes | Non-empty after strip |
+| `engagement_score` | float | Yes | `0.0 ≤ value ≤ 1.0` (pre-normalized; 0–100 scale not accepted) |
+| `availability` | string | Yes | Non-empty after strip |
+
+---
+
+### Response (201 Created)
+
+Returns the created `AlumniProfile` — the same shape as `GET /v1/alumni/{alumni_id}`.
+
+```json
+{
+  "alumni_id": "A007",
+  "full_name": "Grace Hopper",
+  "email": "grace.hopper@example.com",
+  "skills": ["python", "fortran"],
+  "interests": ["education"],
+  "location": "NY",
+  "engagement_score": 0.85,
+  "availability": "available"
+}
+```
+
+---
+
+### Error Responses
+
+#### 401 Unauthorized — missing or wrong API key
+
+#### 409 Conflict — alumni_id already exists
+
+```json
+{"error": {"code": 409, "message": "Conflict: alumni_id already exists", "request_id": "..."}}
+```
+
+#### 409 Conflict — email already exists
+
+```json
+{"error": {"code": 409, "message": "Conflict: email already exists", "request_id": "..."}}
+```
+
+#### 422 Validation Error — field constraint violated
+
+#### 503 Service Unavailable — active repository is read-only (CSV mode)
+
+```json
+{"error": {"code": 503, "message": "CsvAlumniRepository is read-only. Set DATABASE_PATH to a seeded SQLite database to enable writes.", "request_id": "..."}}
+```
+
+---
+
 ## Endpoint: GET /v1/alumni/{alumni_id}
 
 ### Purpose

@@ -14,7 +14,7 @@ from pydantic import BaseModel, Field, field_validator
 from pythonjsonlogger import json as jsonlogger
 
 from src.matching_engine import load_alumni_profiles_csv, rank_alumni
-from src.repository import CsvAlumniRepository, SqliteAlumniRepository
+from src.repository import AlumniAlreadyExistsError, CsvAlumniRepository, SqliteAlumniRepository
 
 _API_KEY = os.getenv("API_KEY")
 if not _API_KEY:
@@ -88,6 +88,55 @@ class MatchRequest(BaseModel):
             if not stripped:
                 raise ValueError("items must not be empty or whitespace-only")
             result.append(stripped)
+        return result
+
+
+class CreateAlumniRequest(BaseModel):
+    alumni_id: str
+    full_name: str
+    email: str
+    skills: list[str] = Field(default=[], max_length=50)
+    interests: list[str] = Field(default=[], max_length=50)
+    location: str
+    engagement_score: float = Field(ge=0.0, le=1.0)
+    availability: str
+
+    @field_validator("alumni_id", "full_name", "location", "availability", mode="before")
+    @classmethod
+    def _strip_and_reject_empty_str(cls, v):
+        if isinstance(v, str):
+            stripped = v.strip()
+            if not stripped:
+                raise ValueError("must not be empty or whitespace-only")
+            return stripped
+        return v
+
+    @field_validator("email", mode="before")
+    @classmethod
+    def _validate_email(cls, v):
+        if isinstance(v, str):
+            stripped = v.strip()
+            if not stripped:
+                raise ValueError("must not be empty or whitespace-only")
+            if "@" not in stripped:
+                raise ValueError("must be a valid email address")
+            return stripped
+        return v
+
+    @field_validator("skills", "interests", mode="before")
+    @classmethod
+    def _normalize_list(cls, v):
+        if not isinstance(v, list):
+            return v
+        result = []
+        for item in v:
+            if not isinstance(item, str):
+                result.append(item)
+                continue
+            stripped = item.strip()
+            if not stripped:
+                raise ValueError("items must not be empty or whitespace-only")
+            result.append(stripped.lower())
         return result
 
 
@@ -287,6 +336,42 @@ def get_alumni(alumni_id: str):
         profile = next((p for p in profiles if p["alumni_id"] == alumni_id), None)
     if profile is None:
         raise HTTPException(status_code=404, detail="Alumni not found")
+    return profile
+
+
+@router.post(
+    "/alumni",
+    response_model=AlumniProfile,
+    status_code=201,
+    summary="Create a new alumni profile",
+    description=(
+        "Persists a new alumni profile to the database. "
+        "Requires a DB-backed deployment (DATABASE_PATH must be set). "
+        "Returns 503 when the active data source is read-only (CSV mode)."
+    ),
+    tags=["Alumni"],
+    dependencies=[Depends(_require_api_key)],
+)
+def create_alumni_profile(body: CreateAlumniRequest):
+    repo = getattr(app.state, "repo", None)
+    if repo is None:
+        # Lifespan did not run (e.g. module-level TestClient). Treat as CSV mode.
+        raise HTTPException(
+            status_code=503,
+            detail=(
+                "CsvAlumniRepository is read-only. "
+                "Set DATABASE_PATH to a seeded SQLite database to enable writes."
+            ),
+        )
+    try:
+        profile = repo.create_alumni(body.model_dump())
+    except NotImplementedError as exc:
+        raise HTTPException(status_code=503, detail=str(exc))
+    except AlumniAlreadyExistsError as exc:
+        raise HTTPException(
+            status_code=409,
+            detail=f"Conflict: {exc.field} already exists",
+        )
     return profile
 
 
