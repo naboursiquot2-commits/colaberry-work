@@ -13,6 +13,7 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from pythonjsonlogger import json as jsonlogger
 
+from src.api_key_repository import ApiKeyRepository
 from src.matching_engine import load_alumni_profiles_csv, rank_alumni
 from src.repository import (
     AlumniAlreadyExistsError,
@@ -48,9 +49,33 @@ _RATE_LIMIT_MAX = int(os.getenv("RATE_LIMIT_MAX", "60"))
 _RATE_LIMIT_WINDOW = int(os.getenv("RATE_LIMIT_WINDOW", "60"))
 
 
-def _require_api_key(x_api_key: str | None = Header(default=None)) -> None:
+def _require_api_key(x_api_key: str | None = Header(default=None)) -> dict | None:
+    """
+    Authenticate the request using the x-api-key header.
+
+    DB mode (DATABASE_PATH is active and api_key_repo is on app.state):
+        Verifies the key against the api_keys table.  Returns a dict with
+        {"key_id", "user_id", "username"} on success.
+
+    Env-var fallback (CSV mode or no api_key_repo):
+        Compares x_api_key directly against the API_KEY env-var string,
+        identical to the original behaviour.  Returns None on success.
+
+    Both paths raise 401 with the same detail string on failure so that
+    callers cannot distinguish the authentication mode from error responses.
+    """
+    api_key_repo: ApiKeyRepository | None = getattr(app.state, "api_key_repo", None)
+    if api_key_repo is not None:
+        if x_api_key is None:
+            raise HTTPException(status_code=401, detail="Invalid or missing API key")
+        result = api_key_repo.verify_key(x_api_key)
+        if result is None:
+            raise HTTPException(status_code=401, detail="Invalid or missing API key")
+        return result
+    # Env-var fallback — unchanged behaviour from original implementation.
     if x_api_key != _API_KEY:
         raise HTTPException(status_code=401, detail="Invalid or missing API key")
+    return None
 
 
 _request_id_ctx: ContextVar[str] = ContextVar("request_id", default="-")
@@ -235,13 +260,63 @@ class AlumniListResponse(BaseModel):
     results: list[AlumniProfile]
 
 
+def _bootstrap_env_api_key(api_key_repo: "ApiKeyRepository") -> None:
+    """
+    Seed the API_KEY env-var value into the api_keys table on first startup.
+
+    If verify_key() succeeds for _API_KEY the key is already present —
+    nothing to do.  Otherwise create the "_env_bootstrap" system user (if it
+    does not already exist) and insert the key so that existing clients and
+    test suites that pass the env-var value continue to authenticate without
+    any change.
+
+    Failures are logged and swallowed: a broken bootstrap must not prevent
+    the application from starting.
+    """
+    try:
+        if api_key_repo.verify_key(_API_KEY) is not None:
+            return  # already seeded — idempotent
+        try:
+            user_info = api_key_repo.create_user("_env_bootstrap")
+        except ValueError:
+            # User row already exists from a previous startup; re-query it.
+            import sqlite3 as _sqlite3
+            con = _sqlite3.connect(api_key_repo._db_path)
+            try:
+                row = con.execute(
+                    "SELECT user_id FROM users WHERE username = ?",
+                    ("_env_bootstrap",),
+                ).fetchone()
+            finally:
+                con.close()
+            if row is None:
+                logger.warning("api_key_bootstrap: _env_bootstrap user not found after IntegrityError")
+                return
+            user_info = {"user_id": row[0]}
+        api_key_repo.create_key(
+            user_info["user_id"],
+            description="bootstrapped from API_KEY env var",
+            raw_key=_API_KEY,
+        )
+        logger.info("api_key_bootstrap: API_KEY seeded into database")
+    except Exception as exc:
+        logger.warning("api_key_bootstrap: could not seed API_KEY: %s", exc)
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     import os as _os
     if DATABASE_PATH and _os.path.exists(DATABASE_PATH):
         repo = SqliteAlumniRepository(DATABASE_PATH)
+        # Phase 1 DB-backed auth: attach an ApiKeyRepository and ensure the
+        # API_KEY env-var value is seeded as a hashed key row so that existing
+        # deployments continue to work without any operator action.
+        api_key_repo = ApiKeyRepository(DATABASE_PATH)
+        app.state.api_key_repo = api_key_repo
+        _bootstrap_env_api_key(api_key_repo)
     else:
         repo = CsvAlumniRepository(DATA_PATH)
+        app.state.api_key_repo = None
     app.state.repo = repo
     # app.state.profiles is retained for backward compatibility: existing tests
     # and the health endpoint read this attribute directly.
@@ -307,19 +382,31 @@ async def _request_id_middleware(request: Request, call_next):
 
 @app.middleware("http")
 async def _rate_limit_middleware(request: Request, call_next):
-    api_key = request.headers.get("x-api-key") or "anonymous"
+    # In DB mode: use key_id as the rate-limit bucket so that the bucket is
+    # stable under key rotation and is not the raw credential value.  The
+    # lookup uses only the key prefix (no scrypt) so it is lightweight.
+    # In env-var fallback mode: use the raw header value, identical to the
+    # original behaviour.
+    raw_key = request.headers.get("x-api-key") or ""
+    api_key_repo: ApiKeyRepository | None = getattr(app.state, "api_key_repo", None)
+    if api_key_repo is not None and raw_key:
+        from src.api_key_repository import _key_prefix as _kp
+        bucket = api_key_repo.get_key_id_by_prefix(_kp(raw_key)) or "anonymous"
+    else:
+        bucket = raw_key or "anonymous"
+
     now = time.time()
     window_start = now - _RATE_LIMIT_WINDOW
-    timestamps = _rate_limit_counts[api_key]
-    _rate_limit_counts[api_key] = [t for t in timestamps if t > window_start]
-    if len(_rate_limit_counts[api_key]) >= _RATE_LIMIT_MAX:
+    timestamps = _rate_limit_counts[bucket]
+    _rate_limit_counts[bucket] = [t for t in timestamps if t > window_start]
+    if len(_rate_limit_counts[bucket]) >= _RATE_LIMIT_MAX:
         global _rate_limited_total
         _rate_limited_total += 1
         return JSONResponse(
             status_code=429,
             content={"error": {"code": 429, "message": "Rate limit exceeded", "request_id": "-"}},
         )
-    _rate_limit_counts[api_key].append(now)
+    _rate_limit_counts[bucket].append(now)
     return await call_next(request)
 
 

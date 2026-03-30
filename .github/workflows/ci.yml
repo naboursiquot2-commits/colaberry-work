@@ -73,7 +73,7 @@ jobs:
           version = con.execute('SELECT MAX(version) FROM schema_version').fetchone()[0]
           count   = con.execute('SELECT COUNT(*) FROM alumni').fetchone()[0]
           con.close()
-          assert version == 2, f'Expected schema version 2, got {version}'
+          assert version == 4, f'Expected schema version 4, got {version}'
           assert count == 1,   f'Expected 1 alumni row, got {count}'
           print(f'Legacy upgrade verified: schema_version={version}, alumni_count={count}')
           "
