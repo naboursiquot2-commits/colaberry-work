@@ -1,0 +1,20 @@
+services:
+  api:
+    build: .
+    ports:
+      - "8000:8000"
+    environment:
+      # Override at runtime: API_KEY=my-key docker compose up
+      # Falls back to a safe local development default when not set in the shell.
+      API_KEY: ${API_KEY:-dev-secret-key}
+      DATABASE_PATH: /app/data/alumni.db
+    volumes:
+      # Named volume persists the SQLite database across container restarts.
+      # On first run with an empty volume, Docker copies the seeded alumni.db
+      # from the image layer into the volume automatically.
+      - alumni_data:/app/data
+    # Healthcheck inherited from the Dockerfile HEALTHCHECK instruction
+    # (probes GET /v1/health every 30s, 3 retries, 15s start period).
+
+volumes:
+  alumni_data:

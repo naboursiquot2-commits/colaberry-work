@@ -237,3 +237,16 @@ Format: append-only. Each entry carries a Session ID; never edit another session
     Notes (updated data layer reality), and removed leftover appendix section.
   - Verification: git diff --stat → 1 file, 104 insertions, 56 deletions.
   - Notes: README.md only. No application code modified.
+
+- [x] M10-T7: Add docker-compose.yml for local deployment
+  - Date: 2026-05-30
+  - Session: CC-20260529-r7m1
+  - What changed: Created docker-compose.yml at repo root. Builds from
+    local Dockerfile; exposes 8000:8000; sets API_KEY via shell env-var
+    with dev-secret-key fallback; sets DATABASE_PATH=/app/data/alumni.db;
+    mounts named volume alumni_data at /app/data so the seeded SQLite DB
+    persists across restarts (Docker copies image contents into a new empty
+    volume on first run). Healthcheck inherited from Dockerfile instruction.
+  - Verification: file content reviewed — no docker compose run yet.
+  - Notes: docker-compose.yml only. No application code, Dockerfile,
+    migrations, or tests modified.
