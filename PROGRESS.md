@@ -119,3 +119,40 @@ Format: append-only. Each entry carries a Session ID; never edit another session
     after first run showed test_revoke_key_second_revoke_returns_404 failing).
     python -m pytest → 268 collected, 268 passed in 20.00s. No regressions.
   - Notes: Only src/api.py modified.
+- [ ] GET /v1/keys — route handler and tests
+  - [x] tests/test_api_key_management.py — 12 tests written (task 4 test suite)
+    - Date: 2026-05-30
+    - Session: CC-20260529-r7m1
+    - What changed: Appended 12 tests to tests/test_api_key_management.py and
+      updated module docstring. Tests cover: 200 with active key list, revoked
+      keys excluded, other-user keys excluded, revoked-key 401 (proxy for empty
+      list — a user with zero active keys cannot authenticate to call the
+      endpoint), 401 auth, 503 CSV mode, raw_key absent from response,
+      key_hash absent from response, description returned, expires_at returned,
+      last_used_at returned (populated by verify_key() during auth).
+      No new fixtures needed; reuses created_key, created_user, db_client.
+      Note on test 32: testing a literal empty-list HTTP response is impossible
+      with the current design (authentication requires at least one active key),
+      so the test instead asserts that a revoked key gets 401 from GET /v1/keys.
+    - Verification: python -m pytest tests/test_api_key_management.py -v →
+      40 collected, 28 passed, 12 FAILED — all 12 new tests fail with
+      AssertionError: 404 == <expected> (route absent). No coincidental passes.
+    - Notes: No src/ changes. Requires both a new list_keys() repository method
+      and a GET /v1/keys route handler before these tests will pass.
+- [x] GET /v1/keys — route handler implemented
+  - Date: 2026-05-30
+  - Session: CC-20260529-r7m1
+  - What changed:
+      src/api_key_repository.py: added list_keys(user_id) — queries api_keys
+      WHERE user_id = ? AND is_active = 1 ORDER BY created_at; returns
+      list[dict] with safe fields only (key_id, key_prefix, description,
+      created_at, last_used_at, expires_at); raw_key and key_hash never
+      returned.
+      src/api.py: added KeyEntry Pydantic model (same safe fields); added
+      GET /v1/keys route handler (list_api_keys) that injects auth via
+      Depends(_require_api_key) to read user_id, returns 503 if api_key_repo
+      is None, delegates to api_key_repo.list_keys(auth["user_id"]).
+  - Verification: python -m pytest tests/test_api_key_management.py -v →
+      40 collected, 40 passed in 9.78s.
+      python -m pytest → 280 collected, 280 passed in 24.14s. No regressions.
+  - Notes: src/api_key_repository.py and src/api.py modified. No migrations.

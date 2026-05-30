@@ -228,6 +228,40 @@ class ApiKeyRepository:
             con.close()
         return cursor.rowcount > 0
 
+    def list_keys(self, user_id: str) -> list[dict]:
+        """
+        Return all active keys owned by user_id.
+
+        Safe fields only — raw_key and key_hash are never returned.
+        Results are ordered by created_at ascending.
+        Returns an empty list if the user has no active keys.
+        """
+        con = sqlite3.connect(self._db_path)
+        try:
+            rows = con.execute(
+                """
+                SELECT key_id, key_prefix, description,
+                       created_at, last_used_at, expires_at
+                FROM   api_keys
+                WHERE  user_id = ? AND is_active = 1
+                ORDER  BY created_at
+                """,
+                (user_id,),
+            ).fetchall()
+        finally:
+            con.close()
+        return [
+            {
+                "key_id":       row[0],
+                "key_prefix":   row[1],
+                "description":  row[2],
+                "created_at":   row[3],
+                "last_used_at": row[4],
+                "expires_at":   row[5],
+            }
+            for row in rows
+        ]
+
     def get_key_id_by_prefix(self, prefix: str) -> str | None:
         """
         Return the key_id for an active key with the given prefix.

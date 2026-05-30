@@ -290,6 +290,15 @@ class CreateKeyResponse(BaseModel):
     raw_key: str
 
 
+class KeyEntry(BaseModel):
+    key_id: str
+    key_prefix: str
+    description: str
+    created_at: str
+    last_used_at: str | None
+    expires_at: str | None
+
+
 def _bootstrap_env_api_key(api_key_repo: "ApiKeyRepository") -> None:
     """
     Seed the API_KEY env-var value into the api_keys table on first startup.
@@ -739,6 +748,32 @@ def revoke_key(key_id: str):
         raise HTTPException(status_code=404, detail="Key not found")
     api_key_repo.revoke_key(key_id)
     return Response(status_code=204)
+
+
+@router.get(
+    "/keys",
+    response_model=list[KeyEntry],
+    summary="List active API keys for the authenticated user",
+    description=(
+        "Returns all active API keys owned by the authenticated caller. "
+        "Revoked keys and keys belonging to other users are excluded. "
+        "raw_key and key_hash are never returned. "
+        "Requires a DB-backed deployment (DATABASE_PATH must be set). "
+        "Returns 503 in CSV mode."
+    ),
+    tags=["Auth"],
+)
+def list_api_keys(auth: dict | None = Depends(_require_api_key)):
+    api_key_repo = getattr(app.state, "api_key_repo", None)
+    if api_key_repo is None:
+        raise HTTPException(
+            status_code=503,
+            detail=(
+                "ApiKeyRepository is unavailable. "
+                "Set DATABASE_PATH to a seeded SQLite database to enable key management."
+            ),
+        )
+    return api_key_repo.list_keys(auth["user_id"])
 
 
 @router.post(
