@@ -1,28 +1,38 @@
 """
 tests/test_api_key_management.py
 
-Tests for Phase 2 key management endpoints — POST /v1/users (task 1).
+Tests for Phase 2 key management endpoints.
 
-All tests in this file are expected to fail with 404 until the endpoint
-is implemented in src/api.py.
+Task 1 — POST /v1/users:
+    1.  Valid username returns 201 with user_id and username
+    2.  Duplicate username returns 409
+    3.  Missing API key returns 401
+    4.  Wrong API key returns 401
+    5.  Empty username returns 422
+    6.  Whitespace-only username returns 422
+    7.  CSV/env-var mode returns 503
+    8.  Duplicate create does not insert a second user row
+    9.  Created user is persisted in the database
 
-Covers:
-    1. Valid username returns 201 with user_id and username
-    2. Duplicate username returns 409
-    3. Missing API key returns 401
-    4. Wrong API key returns 401
-    5. Empty username returns 422
-    6. Whitespace-only username returns 422
-    7. CSV/env-var mode returns 503
-    8. Duplicate create does not insert a second user row
-    9. Created user is persisted in the database
+Task 2 — POST /v1/users/{user_id}/keys:
+    10. Valid user_id returns 201 with key_id, key_prefix, and raw_key
+    11. raw_key has the expected {prefix}.{secret} format and prefix matches key_prefix
+    12. Created key is persisted as a hash, not plaintext
+    13. Missing API key returns 401
+    14. Wrong API key returns 401
+    15. Nonexistent user_id returns 404
+    16. CSV/env-var mode returns 503
+    17. Optional description is persisted to the database
+    18. Optional expires_at is persisted to the database
+    19. Generated raw_key can authenticate successfully against a protected endpoint
 
 Strategy:
     - DB-mode tests monkeypatch DATABASE_PATH to a freshly seeded temp DB and
       use TestClient(app) as a context manager to trigger the lifespan.
-    - CSV-mode test patches DATABASE_PATH to None (same pattern as
-      test_api_db_auth.py fallback tests).
+    - CSV-mode tests patch DATABASE_PATH to None.
     - Each test gets its own seeded_db fixture instance for full isolation.
+    - Task 2 tests use the created_user fixture which calls the already-implemented
+      POST /v1/users to obtain a valid user_id before exercising the keys endpoint.
 """
 
 import sqlite3
@@ -192,3 +202,196 @@ def test_create_user_persists_to_database(db_client):
     assert row is not None
     assert row[0] == returned_user_id
     assert row[1] == "grace"
+
+
+# ===========================================================================
+# Task 2 — POST /v1/users/{user_id}/keys
+# ===========================================================================
+
+@pytest.fixture()
+def created_user(db_client):
+    """Create a user via POST /v1/users and return (client, db_path, user_id)."""
+    client, db_path = db_client
+    resp = client.post("/v1/users", json={"username": "keytest"}, headers=VALID_KEY)
+    assert resp.status_code == 201, f"created_user fixture: expected 201, got {resp.status_code}"
+    return client, db_path, resp.json()["user_id"]
+
+
+# ---------------------------------------------------------------------------
+# 10. Valid user_id returns 201 with key_id, key_prefix, and raw_key
+# ---------------------------------------------------------------------------
+
+def test_create_key_returns_201_with_key_id_prefix_and_raw_key(created_user):
+    client, _, user_id = created_user
+    response = client.post(f"/v1/users/{user_id}/keys", json={}, headers=VALID_KEY)
+    assert response.status_code == 201
+    body = response.json()
+    assert "key_id" in body
+    assert "key_prefix" in body
+    assert "raw_key" in body
+
+
+# ---------------------------------------------------------------------------
+# 11. raw_key has the expected format and prefix matches key_prefix
+# ---------------------------------------------------------------------------
+
+def test_create_key_raw_key_has_expected_format(created_user):
+    """raw_key must be {8-char prefix}.{56-char secret} (65 chars total)."""
+    client, _, user_id = created_user
+    response = client.post(f"/v1/users/{user_id}/keys", json={}, headers=VALID_KEY)
+    assert response.status_code == 201
+    body = response.json()
+    raw_key = body["raw_key"]
+
+    assert len(raw_key) == 65
+    assert raw_key.count(".") == 1
+    prefix, secret = raw_key.split(".", 1)
+    assert len(prefix) == 8
+    assert len(secret) == 56
+    assert prefix == body["key_prefix"]
+
+
+# ---------------------------------------------------------------------------
+# 12. Created key is persisted as a hash, not plaintext
+# ---------------------------------------------------------------------------
+
+def test_create_key_stored_as_hash_not_plaintext(created_user):
+    """key_hash in the DB must not contain the raw_key; must follow salt:digest format."""
+    client, db_path, user_id = created_user
+    response = client.post(f"/v1/users/{user_id}/keys", json={}, headers=VALID_KEY)
+    assert response.status_code == 201
+    body = response.json()
+    raw_key = body["raw_key"]
+    key_id = body["key_id"]
+
+    con = sqlite3.connect(db_path)
+    try:
+        row = con.execute(
+            "SELECT key_hash, is_active FROM api_keys WHERE key_id = ?", (key_id,)
+        ).fetchone()
+    finally:
+        con.close()
+
+    assert row is not None
+    key_hash, is_active = row
+    assert raw_key not in key_hash       # plaintext must not appear in stored value
+    assert ":" in key_hash               # salt:digest separator
+    assert is_active == 1
+
+
+# ---------------------------------------------------------------------------
+# 13. Missing API key returns 401
+# ---------------------------------------------------------------------------
+
+def test_create_key_missing_api_key_returns_401(db_client):
+    client, _ = db_client
+    response = client.post("/v1/users/some-user-id/keys", json={})
+    assert response.status_code == 401
+
+
+# ---------------------------------------------------------------------------
+# 14. Wrong API key returns 401
+# ---------------------------------------------------------------------------
+
+def test_create_key_wrong_api_key_returns_401(db_client):
+    client, _ = db_client
+    response = client.post(
+        "/v1/users/some-user-id/keys",
+        json={},
+        headers={"x-api-key": "wrong-key"},
+    )
+    assert response.status_code == 401
+
+
+# ---------------------------------------------------------------------------
+# 15. Nonexistent user_id returns 404
+# ---------------------------------------------------------------------------
+
+def test_create_key_nonexistent_user_id_returns_404(db_client):
+    client, _ = db_client
+    fake_id = "00000000-0000-0000-0000-000000000000"
+    response = client.post(f"/v1/users/{fake_id}/keys", json={}, headers=VALID_KEY)
+    assert response.status_code == 404
+
+
+# ---------------------------------------------------------------------------
+# 16. CSV/env-var mode returns 503
+# ---------------------------------------------------------------------------
+
+def test_create_key_csv_mode_returns_503(monkeypatch):
+    """Without a DB-backed deployment the keys endpoint must return 503."""
+    monkeypatch.setattr(api_module, "DATABASE_PATH", None)
+    fake_id = "00000000-0000-0000-0000-000000000000"
+    with TestClient(app) as client:
+        response = client.post(
+            f"/v1/users/{fake_id}/keys", json={}, headers=VALID_KEY
+        )
+    assert response.status_code == 503
+
+
+# ---------------------------------------------------------------------------
+# 17. Optional description is persisted
+# ---------------------------------------------------------------------------
+
+def test_create_key_description_is_persisted(created_user):
+    client, db_path, user_id = created_user
+    response = client.post(
+        f"/v1/users/{user_id}/keys",
+        json={"description": "CI smoke-test key"},
+        headers=VALID_KEY,
+    )
+    assert response.status_code == 201
+    key_id = response.json()["key_id"]
+
+    con = sqlite3.connect(db_path)
+    try:
+        row = con.execute(
+            "SELECT description FROM api_keys WHERE key_id = ?", (key_id,)
+        ).fetchone()
+    finally:
+        con.close()
+
+    assert row is not None
+    assert row[0] == "CI smoke-test key"
+
+
+# ---------------------------------------------------------------------------
+# 18. Optional expires_at is persisted
+# ---------------------------------------------------------------------------
+
+def test_create_key_expires_at_is_persisted(created_user):
+    client, db_path, user_id = created_user
+    expires = "2030-01-01 00:00:00"
+    response = client.post(
+        f"/v1/users/{user_id}/keys",
+        json={"expires_at": expires},
+        headers=VALID_KEY,
+    )
+    assert response.status_code == 201
+    key_id = response.json()["key_id"]
+
+    con = sqlite3.connect(db_path)
+    try:
+        row = con.execute(
+            "SELECT expires_at FROM api_keys WHERE key_id = ?", (key_id,)
+        ).fetchone()
+    finally:
+        con.close()
+
+    assert row is not None
+    assert row[0] == expires
+
+
+# ---------------------------------------------------------------------------
+# 19. Generated raw_key authenticates successfully
+# ---------------------------------------------------------------------------
+
+def test_create_key_raw_key_authenticates_successfully(created_user):
+    """A key returned by the endpoint must pass _require_api_key on a protected route."""
+    client, _, user_id = created_user
+    response = client.post(f"/v1/users/{user_id}/keys", json={}, headers=VALID_KEY)
+    assert response.status_code == 201
+    raw_key = response.json()["raw_key"]
+
+    auth_response = client.get("/v1/alumni", headers={"x-api-key": raw_key})
+    assert auth_response.status_code == 200

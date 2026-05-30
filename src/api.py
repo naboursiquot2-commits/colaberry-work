@@ -279,6 +279,17 @@ class CreateUserResponse(BaseModel):
     username: str
 
 
+class CreateKeyRequest(BaseModel):
+    description: str = ""
+    expires_at: str | None = None
+
+
+class CreateKeyResponse(BaseModel):
+    key_id: str
+    key_prefix: str
+    raw_key: str
+
+
 def _bootstrap_env_api_key(api_key_repo: "ApiKeyRepository") -> None:
     """
     Seed the API_KEY env-var value into the api_keys table on first startup.
@@ -638,6 +649,54 @@ def create_user(body: CreateUserRequest):
         return api_key_repo.create_user(body.username)
     except ValueError as exc:
         raise HTTPException(status_code=409, detail=str(exc))
+
+
+@router.post(
+    "/users/{user_id}/keys",
+    response_model=CreateKeyResponse,
+    status_code=201,
+    summary="Issue an API key for a user",
+    description=(
+        "Generates a new API key for the user identified by user_id. "
+        "The raw_key is returned exactly once in this response — it is never "
+        "stored in plaintext and cannot be retrieved again. "
+        "Requires a DB-backed deployment (DATABASE_PATH must be set). "
+        "Returns 503 in CSV mode, 404 if user_id does not exist."
+    ),
+    tags=["Auth"],
+    dependencies=[Depends(_require_api_key)],
+)
+def create_key(user_id: str, body: CreateKeyRequest):
+    api_key_repo = getattr(app.state, "api_key_repo", None)
+    if api_key_repo is None:
+        raise HTTPException(
+            status_code=503,
+            detail=(
+                "ApiKeyRepository is unavailable. "
+                "Set DATABASE_PATH to a seeded SQLite database to enable key management."
+            ),
+        )
+    # SQLite does not enforce FK constraints without PRAGMA foreign_keys = ON,
+    # so create_key() would silently insert a row for an unknown user_id.
+    # Check existence explicitly to return a meaningful 404.
+    import sqlite3 as _sqlite3
+    _con = _sqlite3.connect(api_key_repo._db_path)
+    try:
+        _row = _con.execute(
+            "SELECT user_id FROM users WHERE user_id = ? AND is_active = 1",
+            (user_id,),
+        ).fetchone()
+    finally:
+        _con.close()
+    if _row is None:
+        raise HTTPException(status_code=404, detail="User not found")
+
+    result = api_key_repo.create_key(
+        user_id,
+        description=body.description,
+        expires_at=body.expires_at,
+    )
+    return result
 
 
 @router.post(
