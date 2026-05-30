@@ -156,3 +156,84 @@ Format: append-only. Each entry carries a Session ID; never edit another session
       40 collected, 40 passed in 9.78s.
       python -m pytest → 280 collected, 280 passed in 24.14s. No regressions.
   - Notes: src/api_key_repository.py and src/api.py modified. No migrations.
+
+---
+
+## M10 — Deployment and Release Readiness
+
+- [x] M10-T1: Deployment readiness audit
+  - Date: 2026-05-30
+  - Session: CC-20260529-r7m1
+  - What changed: No files modified. Audit report produced in session.
+  - Verification: user confirmed — audit findings accepted
+  - Notes: Seven gaps identified; M10-T2 through M10-T7 recommended.
+    Highest-priority gap: Dockerfile installs requirements.txt not lock file.
+
+- [x] M10-T2 (part 1): Fix Dockerfile dependency installation to match CI
+  - Date: 2026-05-30
+  - Session: CC-20260529-r7m1
+  - What changed: Dockerfile — changed COPY and pip install to use
+    requirements-lock.txt instead of requirements.txt. Two-line change;
+    ensures Docker builds install the exact same pinned transitive
+    dependency tree that CI validates rather than resolving fresh.
+  - Verification: Dockerfile diff reviewed — change is exactly two lines,
+    no other modifications. Docker build not yet run.
+  - Notes: Dockerfile only. No application code, migrations, or tests changed.
+
+- [x] M10-T3: Update stale _BOOTSTRAP_VERSION constant in migrate_database.py
+  - Date: 2026-05-30
+  - Session: CC-20260529-r7m1
+  - What changed: execution/migrate_database.py — changed _BOOTSTRAP_VERSION
+    from 2 to 4. The constant stamps legacy databases (alumni table present,
+    no schema_version table) at the highest migration version known to already
+    be applied. Migrations 0003 (users) and 0004 (api_keys) were added in M9
+    but the constant was never updated, so a legacy DB bootstrapped with the
+    old value would be stamped at 2 and then attempt to re-apply 0003 and 0004
+    — safe (CREATE TABLE IF NOT EXISTS) but semantically incorrect.
+  - Verification: git diff — one line changed. python -m pytest
+    tests/test_migrations.py -v → 23 collected, 23 passed in 0.59s.
+  - Notes: execution/migrate_database.py only. No application code, tests,
+    or migration SQL files changed.
+
+- [x] M10-T4: Document RATE_LIMIT_MAX, RATE_LIMIT_WINDOW, and DB-mode capabilities in .env.example
+  - Date: 2026-05-30
+  - Session: CC-20260529-r7m1
+  - What changed: .env.example — added commented-out RATE_LIMIT_MAX=60 and
+    RATE_LIMIT_WINDOW=60 entries with defaults and the per-worker scaling note;
+    expanded DATABASE_PATH comment to list the write-capable endpoints that
+    require DB-backed mode (alumni CRUD + all four key management endpoints).
+  - Verification: git diff reviewed — comments and commented-out vars only,
+    no executable lines added or changed.
+  - Notes: .env.example only. No application code modified.
+
+- [x] M10-T5: Add API key management operational guidance to docs/runbook.md
+  - Date: 2026-05-30
+  - Session: CC-20260529-r7m1
+  - What changed: docs/runbook.md — appended Section 6 (API Key Management)
+    with six subsections: overview of DB-backed mode, initial user/key setup
+    (6.1), listing active keys (6.2), key rotation with safe ordering (6.3),
+    key revocation with response table (6.4), recovery when all keys are
+    revoked including bootstrap-key emergency procedure (6.5), and DB-level
+    key status verification (6.6).
+  - Verification: git diff --stat → 173 insertions, 0 deletions. Existing
+    runbook content confirmed intact (diff tail shows correct end of file).
+  - Notes: docs/runbook.md only. No application code modified.
+
+- [x] M10-T6: Update README.md to reflect current platform state
+  - Date: 2026-05-30
+  - Session: CC-20260529-r7m1
+  - What changed: README.md — 104 insertions, 56 deletions across seven
+    targeted sections: (1) feature list — added DB storage, key management,
+    migrations, metrics/version endpoints, lock-file Docker, updated test
+    count to 280; (2) Data Layer architecture — SQLite primary + CSV fallback
+    + migration version; (3) API endpoints table — replaced 4-row table with
+    full 13-route inventory across System/Alumni/Matching/Key Management
+    groups; (4) setup — pip install now references requirements-lock.txt,
+    .env.example noted, DATABASE_PATH added to example config; (5) Docker —
+    added -e API_KEY to run commands, added DATABASE_PATH variant; (6) CI
+    description — updated to reflect migration validation, 280 tests, golden
+    run, DB-mode pass; (7) Project Structure — full current tree with
+    annotations; also updated Future Improvements (removed done items),
+    Notes (updated data layer reality), and removed leftover appendix section.
+  - Verification: git diff --stat → 1 file, 104 insertions, 56 deletions.
+  - Notes: README.md only. No application code modified.

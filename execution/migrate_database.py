@@ -59,7 +59,7 @@ CREATE TABLE IF NOT EXISTS schema_version (
 # database (alumni table exists, no schema_version) is bootstrapped.
 # Update this constant whenever new migrations are added to ensure legacy
 # databases are correctly stamped on their first upgrade.
-_BOOTSTRAP_VERSION = 2
+_BOOTSTRAP_VERSION = 4
 
 
 # ---------------------------------------------------------------------------

@@ -201,3 +201,176 @@ curl -s http://localhost:8000/v1/metrics
 ```
 
 Returns `requests_total`, `requests_by_status`, `errors_total`, and `rate_limited_total`. No API key required. Counters are per-process and reset on restart — see Known Limitations above.
+
+---
+
+## 6. API Key Management
+
+Database-backed mode (`DATABASE_PATH` set and file exists) enables a full key management system: named user accounts, per-user API keys with optional expiry and description, and per-key revocation.
+
+The `API_KEY` environment variable is always required at startup. In DB-backed mode, its value is automatically seeded as a hashed key row on first boot (the bootstrap key). All key management endpoints require a valid API key in the `x-api-key` header.
+
+---
+
+### 6.1 Initial User and Key Setup
+
+On first boot in DB-backed mode, the bootstrap shim creates a system user `_env_bootstrap` and stores the `API_KEY` env-var value as a hashed key. This is sufficient to call all read endpoints immediately. To begin issuing named, rotatable keys:
+
+**Step 1 — Create a named user account:**
+```bash
+curl -s -X POST http://localhost:8000/v1/users \
+  -H "Content-Type: application/json" \
+  -H "x-api-key: <your-API_KEY>" \
+  -d '{"username": "alice"}'
+```
+
+Response (201):
+```json
+{"user_id": "f47ac10b-...", "username": "alice"}
+```
+
+Save the `user_id`. It is needed to issue keys.
+
+**Step 2 — Issue an API key for the user:**
+```bash
+curl -s -X POST http://localhost:8000/v1/users/<user_id>/keys \
+  -H "Content-Type: application/json" \
+  -H "x-api-key: <your-API_KEY>" \
+  -d '{"description": "production client", "expires_at": "2027-01-01 00:00:00"}'
+```
+
+Response (201):
+```json
+{
+  "key_id":     "9a3f...",
+  "key_prefix": "3e8a1b2c",
+  "raw_key":    "3e8a1b2c.f9d04c..."
+}
+```
+
+**Copy `raw_key` immediately.** It is returned exactly once and never stored in plaintext. It cannot be retrieved again.
+
+Distribute `raw_key` to the client as the `x-api-key` header value.
+
+---
+
+### 6.2 Listing Active Keys for a User
+
+A user can list their own active keys (no raw key is returned):
+```bash
+curl -s http://localhost:8000/v1/keys \
+  -H "x-api-key: <raw_key_for_that_user>"
+```
+
+Response (200):
+```json
+[
+  {
+    "key_id":       "9a3f...",
+    "key_prefix":   "3e8a1b2c",
+    "description":  "production client",
+    "created_at":   "2026-05-30 12:00:00",
+    "last_used_at": "2026-05-30 14:23:11",
+    "expires_at":   "2027-01-01 00:00:00"
+  }
+]
+```
+
+`key_hash` and `raw_key` are never returned by this endpoint.
+
+---
+
+### 6.3 Key Rotation
+
+Rotate a key by issuing a new one before revoking the old one. Never revoke first — that creates a window where the client cannot authenticate.
+
+**Step 1 — Issue a new key:**
+```bash
+curl -s -X POST http://localhost:8000/v1/users/<user_id>/keys \
+  -H "Content-Type: application/json" \
+  -H "x-api-key: <any-active-key>" \
+  -d '{"description": "production client — rotated 2026-05-30"}'
+```
+
+Save the new `raw_key`.
+
+**Step 2 — Distribute the new key to the client and confirm it works.**
+
+**Step 3 — Revoke the old key:**
+```bash
+curl -s -X DELETE http://localhost:8000/v1/keys/<old_key_id> \
+  -H "x-api-key: <any-active-key>"
+```
+
+Response: `204 No Content`. The old key is immediately rejected on any subsequent request.
+
+---
+
+### 6.4 Key Revocation
+
+Revoke a single key by `key_id`:
+```bash
+curl -s -X DELETE http://localhost:8000/v1/keys/<key_id> \
+  -H "x-api-key: <any-active-key>"
+```
+
+| Response | Meaning |
+|---|---|
+| 204 | Key revoked successfully |
+| 404 | `key_id` not found or already revoked |
+| 401 | The `x-api-key` used to call this endpoint is invalid or revoked |
+
+The key row is retained in the database for audit purposes (`is_active = 0`). It cannot be reactivated via the API.
+
+---
+
+### 6.5 Recovery: All Managed Keys Revoked
+
+If all keys for a user are revoked and no other active key exists, that user can no longer authenticate. The bootstrap key (`API_KEY` env-var value) remains active unless explicitly revoked, and can be used to issue new keys at any time.
+
+**Recovery using the bootstrap key:**
+```bash
+# Verify the bootstrap key still works
+curl -s http://localhost:8000/v1/health
+
+# Issue a new key for the locked-out user
+curl -s -X POST http://localhost:8000/v1/users/<user_id>/keys \
+  -H "Content-Type: application/json" \
+  -H "x-api-key: <API_KEY env-var value>" \
+  -d '{"description": "recovery key — issued 2026-05-30"}'
+```
+
+**If the bootstrap key itself has been revoked:**
+
+The `API_KEY` env-var value is verified against the hashed row in the database on every request. If that row is revoked, the env-var value is rejected. Recovery requires direct database access:
+
+```bash
+# Enter the running container
+docker exec -it <container-name> sh
+
+# Inspect the api_keys table
+sqlite3 /app/data/alumni.db \
+  "SELECT key_id, key_prefix, is_active, description FROM api_keys;"
+
+# Re-activate the bootstrap key directly (emergency only)
+sqlite3 /app/data/alumni.db \
+  "UPDATE api_keys SET is_active = 1 WHERE description = 'bootstrapped from API_KEY env var';"
+```
+
+Then restart the container to reload the connection pool. The `API_KEY` env-var value will authenticate again.
+
+Longer term: set a new `API_KEY` env-var value and redeploy. The bootstrap shim will seed the new value as a fresh key row on the next startup.
+
+---
+
+### 6.6 Verifying a Key Is Active
+
+Check whether a specific key is still active via direct DB inspection:
+```bash
+docker exec <container-name> \
+  sqlite3 /app/data/alumni.db \
+  "SELECT key_id, key_prefix, is_active, last_used_at, expires_at, description
+   FROM api_keys WHERE key_prefix = '<first 8 chars of raw_key>';"
+```
+
+`is_active = 1` means the key is currently valid (subject to `expires_at`). `is_active = 0` means revoked.
