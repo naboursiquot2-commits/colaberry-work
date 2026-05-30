@@ -260,6 +260,25 @@ class AlumniListResponse(BaseModel):
     results: list[AlumniProfile]
 
 
+class CreateUserRequest(BaseModel):
+    username: str
+
+    @field_validator("username", mode="before")
+    @classmethod
+    def _strip_and_reject_empty(cls, v):
+        if isinstance(v, str):
+            stripped = v.strip()
+            if not stripped:
+                raise ValueError("must not be empty or whitespace-only")
+            return stripped
+        return v
+
+
+class CreateUserResponse(BaseModel):
+    user_id: str
+    username: str
+
+
 def _bootstrap_env_api_key(api_key_repo: "ApiKeyRepository") -> None:
     """
     Seed the API_KEY env-var value into the api_keys table on first startup.
@@ -590,6 +609,35 @@ def delete_alumni_profile(alumni_id: str):
     # mutate the existing list in place).
     app.state.profiles = repo.get_all_alumni()
     return Response(status_code=204)
+
+
+@router.post(
+    "/users",
+    response_model=CreateUserResponse,
+    status_code=201,
+    summary="Create a user account",
+    description=(
+        "Creates a named user account that can own API keys. "
+        "Requires a DB-backed deployment (DATABASE_PATH must be set). "
+        "Returns 503 in CSV mode."
+    ),
+    tags=["Auth"],
+    dependencies=[Depends(_require_api_key)],
+)
+def create_user(body: CreateUserRequest):
+    api_key_repo = getattr(app.state, "api_key_repo", None)
+    if api_key_repo is None:
+        raise HTTPException(
+            status_code=503,
+            detail=(
+                "ApiKeyRepository is unavailable. "
+                "Set DATABASE_PATH to a seeded SQLite database to enable user management."
+            ),
+        )
+    try:
+        return api_key_repo.create_user(body.username)
+    except ValueError as exc:
+        raise HTTPException(status_code=409, detail=str(exc))
 
 
 @router.post(
