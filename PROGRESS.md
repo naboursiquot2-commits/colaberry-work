@@ -84,3 +84,38 @@ Format: append-only. Each entry carries a Session ID; never edit another session
     19 collected, 19 passed in 3.67s.
     python -m pytest → 259 collected, 259 passed in 17.94s. No regressions.
   - Notes: Only src/api.py modified. No migrations, no repository changes.
+- [ ] DELETE /v1/keys/{key_id} — route handler and tests
+  - [x] tests/test_api_key_management.py — 9 tests written (task 3 test suite)
+    - Date: 2026-05-30
+    - Session: CC-20260529-r7m1
+    - What changed: Appended 9 tests and created_key fixture to
+      tests/test_api_key_management.py; updated module docstring.
+      Tests cover: 204 revoke, authentication blocked after revoke, 404
+      nonexistent key, 401 auth, 503 CSV mode, is_active=0 DB persistence,
+      404 on second revoke, sibling key unaffected.
+      created_key fixture chains created_user → POST /v1/users/{user_id}/keys
+      (both endpoints already implemented).
+    - Verification: python -m pytest tests/test_api_key_management.py -v →
+      28 collected, 20 passed, 8 FAILED — all 19 Task 1+2 tests pass; 8 of
+      9 new Task 3 tests fail with AssertionError: 404 == <expected> (route
+      absent). Exception: test_revoke_key_nonexistent_key_id_returns_404
+      passes coincidentally (FastAPI 404 for unknown route matches expected
+      404; will continue to pass for the correct reason once endpoint exists).
+    - Notes: No src/ changes. Task 3 tests will pass once
+      DELETE /v1/keys/{key_id} is implemented.
+- [x] DELETE /v1/keys/{key_id} — route handler implemented
+  - Date: 2026-05-30
+  - Session: CC-20260529-r7m1
+  - What changed: Added DELETE /v1/keys/{key_id} route handler to src/api.py.
+    Route is protected by _require_api_key. Returns 503 if api_key_repo is
+    None, 404 if key is missing or already revoked, 204 on success.
+    Required a pre-check via direct SQLite query (WHERE key_id = ? AND
+    is_active = 1) because ApiKeyRepository.revoke_key() uses WHERE key_id = ?
+    alone — its rowcount is 1 even for an already-inactive row, which would
+    silently return 204 on a second revoke without the guard. No repository
+    methods modified; no migrations changed.
+  - Verification: python -m pytest tests/test_api_key_management.py -v →
+    28 collected, 28 passed in 6.08s (required one fix: added is_active guard
+    after first run showed test_revoke_key_second_revoke_returns_404 failing).
+    python -m pytest → 268 collected, 268 passed in 20.00s. No regressions.
+  - Notes: Only src/api.py modified.

@@ -699,6 +699,48 @@ def create_key(user_id: str, body: CreateKeyRequest):
     return result
 
 
+@router.delete(
+    "/keys/{key_id}",
+    status_code=204,
+    summary="Revoke an API key",
+    description=(
+        "Permanently deactivates the API key identified by key_id. "
+        "The key row is retained for audit purposes but is_active is set to 0. "
+        "Returns 404 if the key does not exist or is already revoked. "
+        "Requires a DB-backed deployment (DATABASE_PATH must be set). "
+        "Returns 503 in CSV mode."
+    ),
+    tags=["Auth"],
+    dependencies=[Depends(_require_api_key)],
+)
+def revoke_key(key_id: str):
+    api_key_repo = getattr(app.state, "api_key_repo", None)
+    if api_key_repo is None:
+        raise HTTPException(
+            status_code=503,
+            detail=(
+                "ApiKeyRepository is unavailable. "
+                "Set DATABASE_PATH to a seeded SQLite database to enable key management."
+            ),
+        )
+    # revoke_key() uses WHERE key_id = ? with no is_active filter, so its
+    # rowcount is 1 even for an already-revoked row. Guard here so that a
+    # missing or already-revoked key_id returns 404 before the UPDATE runs.
+    import sqlite3 as _sqlite3
+    _con = _sqlite3.connect(api_key_repo._db_path)
+    try:
+        _row = _con.execute(
+            "SELECT key_id FROM api_keys WHERE key_id = ? AND is_active = 1",
+            (key_id,),
+        ).fetchone()
+    finally:
+        _con.close()
+    if _row is None:
+        raise HTTPException(status_code=404, detail="Key not found")
+    api_key_repo.revoke_key(key_id)
+    return Response(status_code=204)
+
+
 @router.post(
     "/match",
     response_model=MatchResponse,

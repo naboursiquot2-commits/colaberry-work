@@ -26,13 +26,25 @@ Task 2 — POST /v1/users/{user_id}/keys:
     18. Optional expires_at is persisted to the database
     19. Generated raw_key can authenticate successfully against a protected endpoint
 
+Task 3 — DELETE /v1/keys/{key_id}:
+    20. Revoke existing key returns 204
+    21. Revoked key can no longer authenticate
+    22. Nonexistent key_id returns 404
+    23. Missing API key returns 401
+    24. Wrong API key returns 401
+    25. CSV/env-var mode returns 503
+    26. Revocation is persisted in the database (is_active = 0)
+    27. Second revoke of same key returns 404
+    28. Revoking one key does not affect another key owned by the same user
+
 Strategy:
     - DB-mode tests monkeypatch DATABASE_PATH to a freshly seeded temp DB and
       use TestClient(app) as a context manager to trigger the lifespan.
     - CSV-mode tests patch DATABASE_PATH to None.
     - Each test gets its own seeded_db fixture instance for full isolation.
-    - Task 2 tests use the created_user fixture which calls the already-implemented
-      POST /v1/users to obtain a valid user_id before exercising the keys endpoint.
+    - Task 2 tests use the created_user fixture (POST /v1/users already implemented).
+    - Task 3 tests use the created_key fixture (POST /v1/users/{user_id}/keys already
+      implemented) which depends on created_user.
 """
 
 import sqlite3
@@ -395,3 +407,140 @@ def test_create_key_raw_key_authenticates_successfully(created_user):
 
     auth_response = client.get("/v1/alumni", headers={"x-api-key": raw_key})
     assert auth_response.status_code == 200
+
+
+# ===========================================================================
+# Task 3 — DELETE /v1/keys/{key_id}
+# ===========================================================================
+
+@pytest.fixture()
+def created_key(created_user):
+    """Issue a key for the keytest user; return (client, db_path, user_id, key_id, raw_key)."""
+    client, db_path, user_id = created_user
+    resp = client.post(f"/v1/users/{user_id}/keys", json={}, headers=VALID_KEY)
+    assert resp.status_code == 201, f"created_key fixture: expected 201, got {resp.status_code}"
+    body = resp.json()
+    return client, db_path, user_id, body["key_id"], body["raw_key"]
+
+
+# ---------------------------------------------------------------------------
+# 20. Revoke existing key returns 204
+# ---------------------------------------------------------------------------
+
+def test_revoke_key_returns_204(created_key):
+    client, _, _, key_id, _ = created_key
+    response = client.delete(f"/v1/keys/{key_id}", headers=VALID_KEY)
+    assert response.status_code == 204
+
+
+# ---------------------------------------------------------------------------
+# 21. Revoked key can no longer authenticate
+# ---------------------------------------------------------------------------
+
+def test_revoke_key_prevents_authentication(created_key):
+    client, _, _, key_id, raw_key = created_key
+    revoke = client.delete(f"/v1/keys/{key_id}", headers=VALID_KEY)
+    assert revoke.status_code == 204
+    auth = client.get("/v1/alumni", headers={"x-api-key": raw_key})
+    assert auth.status_code == 401
+
+
+# ---------------------------------------------------------------------------
+# 22. Nonexistent key_id returns 404
+# ---------------------------------------------------------------------------
+
+def test_revoke_key_nonexistent_key_id_returns_404(db_client):
+    client, _ = db_client
+    fake_id = "00000000-0000-0000-0000-000000000000"
+    response = client.delete(f"/v1/keys/{fake_id}", headers=VALID_KEY)
+    assert response.status_code == 404
+
+
+# ---------------------------------------------------------------------------
+# 23. Missing API key returns 401
+# ---------------------------------------------------------------------------
+
+def test_revoke_key_missing_api_key_returns_401(db_client):
+    client, _ = db_client
+    response = client.delete("/v1/keys/some-key-id")
+    assert response.status_code == 401
+
+
+# ---------------------------------------------------------------------------
+# 24. Wrong API key returns 401
+# ---------------------------------------------------------------------------
+
+def test_revoke_key_wrong_api_key_returns_401(db_client):
+    client, _ = db_client
+    response = client.delete(
+        "/v1/keys/some-key-id",
+        headers={"x-api-key": "wrong-key"},
+    )
+    assert response.status_code == 401
+
+
+# ---------------------------------------------------------------------------
+# 25. CSV mode returns 503
+# ---------------------------------------------------------------------------
+
+def test_revoke_key_csv_mode_returns_503(monkeypatch):
+    """Without a DB-backed deployment the revoke endpoint must return 503."""
+    monkeypatch.setattr(api_module, "DATABASE_PATH", None)
+    fake_id = "00000000-0000-0000-0000-000000000000"
+    with TestClient(app) as client:
+        response = client.delete(f"/v1/keys/{fake_id}", headers=VALID_KEY)
+    assert response.status_code == 503
+
+
+# ---------------------------------------------------------------------------
+# 26. Revocation is persisted in the database
+# ---------------------------------------------------------------------------
+
+def test_revoke_key_sets_is_active_to_0_in_database(created_key):
+    client, db_path, _, key_id, _ = created_key
+    revoke = client.delete(f"/v1/keys/{key_id}", headers=VALID_KEY)
+    assert revoke.status_code == 204
+
+    con = sqlite3.connect(db_path)
+    try:
+        row = con.execute(
+            "SELECT is_active FROM api_keys WHERE key_id = ?", (key_id,)
+        ).fetchone()
+    finally:
+        con.close()
+
+    assert row is not None
+    assert row[0] == 0
+
+
+# ---------------------------------------------------------------------------
+# 27. Second revoke of same key returns 404
+# ---------------------------------------------------------------------------
+
+def test_revoke_key_second_revoke_returns_404(created_key):
+    client, _, _, key_id, _ = created_key
+    first = client.delete(f"/v1/keys/{key_id}", headers=VALID_KEY)
+    assert first.status_code == 204
+    second = client.delete(f"/v1/keys/{key_id}", headers=VALID_KEY)
+    assert second.status_code == 404
+
+
+# ---------------------------------------------------------------------------
+# 28. Revoking one key does not affect another key owned by the same user
+# ---------------------------------------------------------------------------
+
+def test_revoke_key_does_not_affect_sibling_key(created_user):
+    """Revoke key_1; key_2 belonging to the same user must still authenticate."""
+    client, _, user_id = created_user
+    resp1 = client.post(f"/v1/users/{user_id}/keys", json={}, headers=VALID_KEY)
+    resp2 = client.post(f"/v1/users/{user_id}/keys", json={}, headers=VALID_KEY)
+    assert resp1.status_code == 201
+    assert resp2.status_code == 201
+    key_id_1 = resp1.json()["key_id"]
+    raw_key_2 = resp2.json()["raw_key"]
+
+    revoke = client.delete(f"/v1/keys/{key_id_1}", headers=VALID_KEY)
+    assert revoke.status_code == 204
+
+    auth = client.get("/v1/alumni", headers={"x-api-key": raw_key_2})
+    assert auth.status_code == 200
